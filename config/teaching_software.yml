@@ -1,0 +1,238 @@
+instructors:
+  prof_001:
+    name: Dr. Thibaud Guilhen
+    email: thibaud.guilhen@univ-lr.fr
+    department: Informatique
+    last_review: '2025-01-01'
+    modules:
+    - mobile_development
+  prof_002:
+    name: Dr. Marie Martin
+    email: marie.martin@univ-lr.fr
+    department: Informatique
+    last_review: '2025-01-01'
+    modules:
+    - data_science
+    - python_basics
+  prof_003:
+    name: Dr. Pierre Lefebvre
+    email: pierre.lefebvre@univ-lr.fr
+    department: Informatique
+    last_review: '2025-01-01'
+    modules:
+    - mobile_development
+modules:
+  web_development:
+    code: INFO-S3-WEB
+    name: Web Development Fundamentals
+    description: HTML, CSS, JavaScript, and backend frameworks
+    semester: 3
+    year: 2
+    os_required:
+    - name: Windows 10/11
+      note: Professional or Home edition
+    - name: macOS 12+
+      note: M1/Intel compatible
+    - name: Linux (Ubuntu 20.04+)
+      note: Recommended for advanced students
+    software:
+    - name: Visual Studio Code
+      purpose: Code editor for web development
+      category: IDE
+      version: Latest
+      notes: 'Install extensions: Live Server, Prettier, ESLint'
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_001
+    - name: Node.js
+      purpose: JavaScript runtime and package manager (npm)
+      category: Runtime
+      version: 18.x or 20.x
+      notes: Required for npm and backend development
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_001
+    - name: Git
+      purpose: Version control system
+      category: Development Tools
+      version: Latest (2.40+)
+      notes: Configure with GitHub/GitLab account
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_001
+    - name: Chrome DevTools
+      purpose: Browser debugging and inspection
+      category: Browser
+      version: Latest
+      notes: Built into Google Chrome
+      critical: false
+      last_verified: '2025-01-01'
+      verified_by: prof_001
+  databases:
+    code: INFO-S4-DB
+    name: Database Design and SQL
+    description: Relational databases, SQL queries, database design
+    semester: 4
+    year: 2
+    os_required:
+    - name: Windows 10/11
+    - name: macOS 12+
+    - name: Linux (Ubuntu 20.04+)
+    software:
+    - name: PostgreSQL
+      purpose: Primary relational database system
+      category: Database
+      version: 14.x or 15.x
+      notes: Install with pgAdmin for GUI management
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_001
+    - name: pgAdmin
+      purpose: PostgreSQL administration and query tool
+      category: Database Tools
+      version: Latest
+      notes: Web-based interface for database management
+      critical: false
+      last_verified: '2025-01-01'
+      verified_by: prof_001
+    - name: DBeaver
+      purpose: Universal database client and SQL editor
+      category: Database Tools
+      version: Latest Community Edition
+      notes: Alternative to pgAdmin, supports multiple databases
+      critical: false
+      last_verified: '2025-01-01'
+      verified_by: prof_001
+  data_science:
+    code: INFO-S5-DATA
+    name: Data Science and Analytics
+    description: Python data analysis, visualization, machine learning basics
+    semester: 5
+    year: 3
+    os_required:
+    - name: Windows 10/11
+    - name: macOS 12+
+    - name: Linux (Ubuntu 20.04+)
+    software:
+    - name: Python
+      purpose: Core programming language for data science
+      category: Runtime
+      version: 3.9 or 3.10 or 3.11
+      notes: Install from python.org or Anaconda
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_002
+    - name: Jupyter Notebook
+      purpose: Interactive coding environment for data analysis
+      category: IDE
+      version: Latest
+      notes: 'Install via pip: pip install jupyter'
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_002
+    - name: Pandas
+      purpose: Data manipulation and analysis library
+      category: Python Library
+      version: 1.5+
+      notes: 'Install via pip: pip install pandas'
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_002
+    - name: Matplotlib
+      purpose: Data visualization library
+      category: Python Library
+      version: 3.5+
+      notes: 'Install via pip: pip install matplotlib'
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_002
+    - name: Scikit-learn
+      purpose: Machine learning library
+      category: Python Library
+      version: 1.0+
+      notes: 'Install via pip: pip install scikit-learn'
+      critical: false
+      last_verified: '2025-01-01'
+      verified_by: prof_002
+  python_basics:
+    code: INFO-S1-PY
+    name: Introduction to Python
+    description: Python fundamentals, syntax, libraries
+    semester: 1
+    year: 1
+    os_required:
+    - name: Windows 10/11
+    - name: macOS 12+
+    - name: Linux (Ubuntu 20.04+)
+    software:
+    - name: Python
+      purpose: Core programming language
+      category: Runtime
+      version: 3.9 or 3.10 or 3.11
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_002
+    - name: Visual Studio Code
+      purpose: Code editor
+      category: IDE
+      version: Latest
+      notes: Install Python extension
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_002
+  mobile_development:
+    code: INFO-S6-MOB
+    name: Mobile App Development
+    description: Android/iOS development, reactive programming
+    semester: 6
+    year: 3
+    os_required:
+    - name: Windows 10/11 64-bit
+      note: Minimum 8GB RAM for emulator
+    - name: macOS 12+ (M1/Intel)
+    - name: Linux (Ubuntu 20.04+)
+    software:
+    - name: Android Studio
+      purpose: Official IDE for Android development
+      category: IDE
+      version: 2023.x or latest
+      notes: Includes Android SDK and emulator
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_003
+    - name: Java JDK
+      purpose: Java runtime for Android development
+      category: Runtime
+      version: 11 or 17
+      notes: Android Studio can install this automatically
+      critical: true
+      last_verified: '2025-01-01'
+      verified_by: prof_003
+    - name: Flutter SDK
+      purpose: Cross-platform mobile framework
+      category: Framework
+      version: 3.x
+      notes: Optional for cross-platform development
+      critical: false
+      last_verified: '2025-01-01'
+      verified_by: prof_003
+email_config:
+  enabled: true
+  reminder_frequency_months: 3
+  smtp_server: mail.univ-lr.fr
+  smtp_port: 25
+  use_tls: false
+  sender_email: teaching-software-manager@univ-lr.fr
+  sender_name: Teaching Software Manager
+  app_base_url: http://localhost:5000
+report_config:
+  generate_pdf: true
+  include_last_verified: true
+  include_critical_only: false
+  format: html
+
+teams_config:
+  # Teams Incoming Webhook URL
+  # Create one here: https://teams.microsoft.com/ → Team Settings → Connectors → Incoming Webhooks
+  # Leave empty to disable Teams notifications
+  webhook_url: ""

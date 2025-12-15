@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Modules d'Enseignement</h1>
+    <button class="btn btn-primary" onclick="showAddModuleModal()">➕ Ajouter un Module</button>
+</div>
+
+<div class="modules-grid">
+    {% for mod_id, module in modules.items() %}
+    <div class="module-card">
+        <h3>{{ module.name }}</h3>
+        {% if module.get('code') %}
+        <p><strong>Code:</strong> {{ module.code }}</p>
+        {% endif %}
+        <p>{{ module.description }}</p>
+        <p><strong>Année:</strong> {{ module.get('year', '?') }} | <strong>Semestre:</strong> {{ module.get('semester', '?') }}</p>
+        <p><strong>Logiciels:</strong> {{ module.software|length }}</p>
+        
+        <div class="os-requirements">
+            <strong>OS Requis:</strong>
+            <ul>
+                {% for os in module.get('os_required', []) %}
+                <li>{{ os.name }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        
+        <div class="card-actions">
+            <a href="{{ url_for('view_module', module_id=mod_id) }}" class="btn btn-primary btn-sm">Voir Détails</a>
+            <button class="btn btn-warning btn-sm" onclick='editModule("{{ mod_id }}", {{ module|tojson }})'>✏️ Modifier</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteModule('{{ mod_id }}', '{{ module.name }}')">🗑️ Supprimer</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal pour ajouter un module -->
+<div id="addModuleModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('addModuleModal')">&times;</span>
+        <h2>Ajouter un Module</h2>
+        <form onsubmit="addModule(event)">
+            <div class="form-group">
+                <label>Code:</label>
+                <input type="text" id="new_mod_code" placeholder="INFO-S3-WEB">
+            </div>
+            <div class="form-group">
+                <label>Nom:</label>
+                <input type="text" id="new_mod_name" required>
+            </div>
+            <div class="form-group">
+                <label>Description:</label>
+                <textarea id="new_mod_description" required></textarea>
+            </div>
+            <div class="form-group">
+                <label>Année:</label>
+                <input type="number" id="new_mod_year" min="1" max="5" required value="1">
+            </div>
+            <div class="form-group">
+                <label>Semestre:</label>
+                <select id="new_mod_semester" required>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Enseignant responsable:</label>
+                <select id="new_mod_instructor">
+                    <option value="">-- Aucun --</option>
+                    {% for inst_id, instructor in all_instructors.items() %}
+                    <option value="{{ inst_id }}">{{ instructor.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Ajouter</button>
+            <button type="button" class="btn" onclick="closeModal('addModuleModal')">Annuler</button>
+        </form>
+    </div>
+</div>
+
+<!-- Modal pour modifier un module -->
+<div id="editModuleModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('editModuleModal')">&times;</span>
+        <h2>Modifier un Module</h2>
+        <form onsubmit="updateModule(event)">
+            <input type="hidden" id="edit_mod_id">
+            <div class="form-group">
+                <label>Code:</label>
+                <input type="text" id="edit_mod_code">
+            </div>
+            <div class="form-group">
+                <label>Nom:</label>
+                <input type="text" id="edit_mod_name" required>
+            </div>
+            <div class="form-group">
+                <label>Description:</label>
+                <textarea id="edit_mod_description" required></textarea>
+            </div>
+            <div class="form-group">
+                <label>Année:</label>
+                <input type="number" id="edit_mod_year" min="1" max="5" required>
+            </div>
+            <div class="form-group">
+                <label>Semestre:</label>
+                <select id="edit_mod_semester" required>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Enseignant responsable:</label>
+                <select id="edit_mod_instructor">
+                    <option value="">-- Aucun --</option>
+                    {% for inst_id, instructor in all_instructors.items() %}
+                    <option value="{{ inst_id }}">{{ instructor.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Enregistrer</button>
+            <button type="button" class="btn" onclick="closeModal('editModuleModal')">Annuler</button>
+        </form>
+    </div>
+</div>
+
+<script>
+function showAddModuleModal() {
+    document.getElementById('addModuleModal').style.display = 'block';
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+}
+
+function addModule(event) {
+    event.preventDefault();
+
+    const moduleName = document.getElementById('new_mod_name').value;
+    const instructorId = document.getElementById('new_mod_instructor').value;
+    
+    // Générer ID automatique basé sur le nom (slug)
+    const id = moduleName.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 30);
+    
+    const data = {
+        id: id,
+        code: document.getElementById('new_mod_code').value,
+        name: moduleName,
+        description: document.getElementById('new_mod_description').value,
+        year: parseInt(document.getElementById('new_mod_year').value),
+        semester: parseInt(document.getElementById('new_mod_semester').value),
+        instructor_id: instructorId || null,
+        os_required: [],
+        software: []
+    };
+
+    fetch('/api/module/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ ' + data.message);
+            location.reload();
+        } else {
+            alert('✗ Erreur: ' + data.error);
+        }
+    });
+}
+
+function editModule(modId, moduleData) {
+    document.getElementById('edit_mod_id').value = modId;
+    document.getElementById('edit_mod_code').value = moduleData.code || '';
+    document.getElementById('edit_mod_name').value = moduleData.name;
+    document.getElementById('edit_mod_description').value = moduleData.description || '';
+    document.getElementById('edit_mod_year').value = moduleData.year || 1;
+    document.getElementById('edit_mod_semester').value = moduleData.semester || 1;
+
+    // Trouver l'enseignant responsable de ce module
+    const instructorSelect = document.getElementById('edit_mod_instructor');
+    instructorSelect.value = ''; // Par défaut aucun
+
+    // Chercher l'enseignant qui a ce module
+    {% for inst_id, instructor in all_instructors.items() %}
+    if ({{ instructor.modules|tojson }}.includes(modId)) {
+        instructorSelect.value = '{{ inst_id }}';
+    }
+    {% endfor %}
+
+    document.getElementById('editModuleModal').style.display = 'block';
+}
+
+function updateModule(event) {
+    event.preventDefault();
+
+    const modId = document.getElementById('edit_mod_id').value;
+    const instructorId = document.getElementById('edit_mod_instructor').value;
+
+    const data = {
+        code: document.getElementById('edit_mod_code').value,
+        name: document.getElementById('edit_mod_name').value,
+        description: document.getElementById('edit_mod_description').value,
+        year: parseInt(document.getElementById('edit_mod_year').value),
+        semester: parseInt(document.getElementById('edit_mod_semester').value),
+        instructor_id: instructorId || null
+    };
+
+    fetch(`/api/module/${modId}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ ' + data.message);
+            location.reload();
+        } else {
+            alert('✗ Erreur: ' + data.error);
+        }
+    });
+}
+
+function deleteModule(modId, name) {
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer le module "${name}" ?`)) return;
+
+    fetch(`/api/module/${modId}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ ' + data.message);
+            location.reload();
+        } else {
+            alert('✗ Erreur: ' + data.error);
+        }
+    });
+}
+
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

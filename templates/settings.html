@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Settings</h1>
+
+<h2>Email Configuration</h2>
+<div class="settings-section">
+    <table class="settings-table">
+        <tr>
+            <th>Setting</th>
+            <th>Value</th>
+        </tr>
+        <tr>
+            <td>Email Notifications Enabled</td>
+            <td>{{ email_config.get('enabled', False)|string }}</td>
+        </tr>
+        <tr>
+            <td>Reminder Frequency</td>
+            <td>Every {{ email_config.get('reminder_frequency_months', '?') }} months</td>
+        </tr>
+        <tr>
+            <td>SMTP Server</td>
+            <td>{{ email_config.get('smtp_server', 'N/A') }}</td>
+        </tr>
+        <tr>
+            <td>SMTP Port</td>
+            <td>{{ email_config.get('smtp_port', 'N/A') }}</td>
+        </tr>
+        <tr>
+            <td>Use TLS</td>
+            <td>{{ email_config.get('use_tls', False)|string }}</td>
+        </tr>
+        <tr>
+            <td>Sender Email</td>
+            <td>{{ email_config.get('sender_email', 'N/A') }}</td>
+        </tr>
+        <tr>
+            <td>Sender Name</td>
+            <td>{{ email_config.get('sender_name', 'N/A') }}</td>
+        </tr>
+    </table>
+    
+    <div class="settings-note">
+        <p><strong>Note:</strong> Email authentication credentials should be set as environment variables:</p>
+        <ul>
+            <li><code>EMAIL_USERNAME</code></li>
+            <li><code>EMAIL_PASSWORD</code></li>
+        </ul>
+    </div>
+</div>
+
+<h2>Report Configuration</h2>
+<div class="settings-section">
+    <table class="settings-table">
+        <tr>
+            <th>Setting</th>
+            <th>Value</th>
+        </tr>
+        <tr>
+            <td>Generate PDF</td>
+            <td>{{ report_config.get('generate_pdf', False)|string }}</td>
+        </tr>
+        <tr>
+            <td>Include Last Verified</td>
+            <td>{{ report_config.get('include_last_verified', False)|string }}</td>
+        </tr>
+        <tr>
+            <td>Include Critical Only</td>
+            <td>{{ report_config.get('include_critical_only', False)|string }}</td>
+        </tr>
+        <tr>
+            <td>Format</td>
+            <td>{{ report_config.get('format', 'N/A') }}</td>
+        </tr>
+    </table>
+</div>
+
+<h2>System Information</h2>
+<div class="settings-section">
+    <p>
+        <strong>Configuration File:</strong> config/teaching_software.yml<br>
+        <strong>Web Application:</strong> Flask<br>
+        <strong>Last Updated:</strong> 2025-01-01
+    </p>
+</div>
+{% endblock %}

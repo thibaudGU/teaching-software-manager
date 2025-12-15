@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Enseignants</h1>
+    <button class="btn btn-primary" onclick="showAddInstructorModal()">➕ Ajouter un Enseignant</button>
+</div>
+
+<div class="instructors-grid">
+    {% for inst_id, instructor in instructors.items() %}
+    <div class="instructor-card">
+        <h3>{{ instructor.name }}</h3>
+        <p><strong>Département:</strong> {{ instructor.get('department', 'N/A') }}</p>
+        <p><strong>Email:</strong> <a href="mailto:{{ instructor.email }}">{{ instructor.email }}</a></p>
+        <p><strong>Modules:</strong> {{ instructor.modules|length }}</p>
+        <p><strong>Dernière Révision:</strong> {{ instructor.get('last_review', 'Jamais') }}</p>
+        <div class="card-actions">
+            <a href="{{ url_for('view_instructor', instructor_id=inst_id) }}" class="btn btn-primary btn-sm">Voir Détails</a>
+            <button class="btn btn-warning btn-sm" onclick='editInstructor("{{ inst_id }}", {{ instructor|tojson }})'>✏️ Modifier</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteInstructor('{{ inst_id }}', '{{ instructor.name }}')">🗑️ Supprimer</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal pour ajouter un enseignant -->
+<div id="addInstructorModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('addInstructorModal')">&times;</span>
+        <h2>Ajouter un Enseignant</h2>
+        <form onsubmit="addInstructor(event)">
+            <div class="form-group">
+                <label>Nom:</label>
+                <input type="text" id="new_inst_name" required>
+            </div>
+            <div class="form-group">
+                <label>Email:</label>
+                <input type="email" id="new_inst_email" required>
+            </div>
+            <div class="form-group">
+                <label>Département:</label>
+                <input type="text" id="new_inst_department">
+            </div>
+            <div class="form-group">
+                <label>Modules assignés:</label>
+                <select id="new_inst_modules" multiple size="5">
+                    {% for mod_id, module in all_modules.items() %}
+                    <option value="{{ mod_id }}">{{ module.name }}</option>
+                    {% endfor %}
+                </select>
+                <small>Maintenir Ctrl pour sélection multiple</small>
+            </div>
+            <button type="submit" class="btn btn-primary">Ajouter</button>
+            <button type="button" class="btn" onclick="closeModal('addInstructorModal')">Annuler</button>
+        </form>
+    </div>
+</div>
+
+<!-- Modal pour modifier un enseignant -->
+<div id="editInstructorModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('editInstructorModal')">&times;</span>
+        <h2>Modifier un Enseignant</h2>
+        <form onsubmit="updateInstructor(event)">
+            <input type="hidden" id="edit_inst_id">
+            <div class="form-group">
+                <label>Nom:</label>
+                <input type="text" id="edit_inst_name" required>
+            </div>
+            <div class="form-group">
+                <label>Email:</label>
+                <input type="email" id="edit_inst_email" required>
+            </div>
+            <div class="form-group">
+                <label>Département:</label>
+                <input type="text" id="edit_inst_department">
+            </div>
+            <div class="form-group">
+                <label>Modules assignés:</label>
+                <select id="edit_inst_modules" multiple size="5">
+                    {% for mod_id, module in all_modules.items() %}
+                    <option value="{{ mod_id }}">{{ module.name }}</option>
+                    {% endfor %}
+                </select>
+                <small>Maintenir Ctrl pour sélection multiple</small>
+            </div>
+            <button type="submit" class="btn btn-primary">Enregistrer</button>
+            <button type="button" class="btn" onclick="closeModal('editInstructorModal')">Annuler</button>
+        </form>
+    </div>
+</div>
+
+<script>
+function showAddInstructorModal() {
+    document.getElementById('addInstructorModal').style.display = 'block';
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+}
+
+function addInstructor(event) {
+    event.preventDefault();
+    
+    const modulesSelect = document.getElementById('new_inst_modules');
+    const selectedModules = Array.from(modulesSelect.selectedOptions).map(opt => opt.value);
+    const name = document.getElementById('new_inst_name').value;
+    
+    // Générer ID automatique basé sur le nom (slug)
+    const id = 'prof_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 20);
+    
+    const data = {
+        id: id,
+        name: name,
+        email: document.getElementById('new_inst_email').value,
+        department: document.getElementById('new_inst_department').value,
+        modules: selectedModules
+    };
+    
+    fetch('/api/instructor/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ ' + data.message);
+            location.reload();
+        } else {
+            alert('✗ Erreur: ' + data.error);
+        }
+    });
+}
+
+function editInstructor(instId, instructorData) {
+    document.getElementById('edit_inst_id').value = instId;
+    document.getElementById('edit_inst_name').value = instructorData.name;
+    document.getElementById('edit_inst_email').value = instructorData.email;
+    document.getElementById('edit_inst_department').value = instructorData.department || '';
+    
+    // Sélectionner les modules assignés
+    const modulesSelect = document.getElementById('edit_inst_modules');
+    Array.from(modulesSelect.options).forEach(option => {
+        option.selected = instructorData.modules && instructorData.modules.includes(option.value);
+    });
+    
+    document.getElementById('editInstructorModal').style.display = 'block';
+}
+
+function updateInstructor(event) {
+    event.preventDefault();
+    
+    const instId = document.getElementById('edit_inst_id').value;
+    const modulesSelect = document.getElementById('edit_inst_modules');
+    const selectedModules = Array.from(modulesSelect.selectedOptions).map(opt => opt.value);
+    
+    const data = {
+        name: document.getElementById('edit_inst_name').value,
+        email: document.getElementById('edit_inst_email').value,
+        department: document.getElementById('edit_inst_department').value,
+        modules: selectedModules
+    };
+    
+    fetch(`/api/instructor/${instId}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ ' + data.message);
+            location.reload();
+        } else {
+            alert('✗ Erreur: ' + data.error);
+        }
+    });
+}
+
+function deleteInstructor(instId, name) {
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer l'enseignant "${name}" ?`)) return;
+    
+    fetch(`/api/instructor/${instId}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ ' + data.message);
+            location.reload();
+        } else {
+            alert('✗ Erreur: ' + data.error);
+        }
+    });
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Rapports et Notifications</h1>
+
+<div class="report-section">
+    <h2>Envoyer des Rappels de Révision</h2>
+    <p>Envoyer des emails de rappel de révision logicielle aux enseignants.</p>
+    
+    <div class="instructors-checklist">
+        {% for inst_id, instructor in instructors.items() %}
+        <div class="instructor-item">
+            <input type="checkbox" id="inst-{{ inst_id }}" class="instructor-checkbox" value="{{ inst_id }}">
+            <label for="inst-{{ inst_id }}">
+                <strong>{{ instructor.name }}</strong><br>
+                <small>{{ instructor.email }}</small>
+            </label>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="actions">
+        <button class="btn btn-warning" onclick="sendSelectedDryRun()">
+            📧 Envoyer Emails de Test (Simulation)
+        </button>
+        <button class="btn btn-danger" onclick="sendSelectedReal()">
+            📧 Envoyer Emails Réels
+        </button>
+        <button class="btn" onclick="sendSelectedTeamsDryRun()">
+            💬 Envoyer via Teams (Simulation)
+        </button>
+        <button class="btn" onclick="sendSelectedTeamsReal()">
+            💬 Envoyer via Teams (Réel)
+        </button>
+    </div>
+</div>
+
+<div id="report-results" style="display:none; margin-top: 30px;">
+    <h2>Résultats</h2>
+    <div id="results-content"></div>
+</div>
+
+<hr>
+
+<div class="report-section">
+    <h2>Rapport Récapitulatif</h2>
+    <p>Générer un inventaire complet de tous les enseignants, modules et logiciels.</p>
+    <button class="btn btn-primary" onclick="generateSummaryReport()">
+        📊 Générer Rapport Récapitulatif
+    </button>
+</div>
+
+<div id="summary-report" style="display:none; margin-top: 30px;">
+    <h2>Rapport Récapitulatif</h2>
+    <pre id="summary-content"></pre>
+</div>
+
+<script>
+function getSelectedInstructors() {
+    const checkboxes = document.querySelectorAll('.instructor-checkbox:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
+}
+
+function sendSelectedDryRun() {
+    const selected = getSelectedInstructors();
+    if (selected.length === 0) {
+        alert('Veuillez sélectionner au moins un enseignant');
+        return;
+    }
+    
+    sendEmails(selected, true);
+}
+
+function sendSelectedReal() {
+    const selected = getSelectedInstructors();
+    if (selected.length === 0) {
+        alert('Veuillez sélectionner au moins un enseignant');
+        return;
+    }
+    
+    if (!confirm(`Envoyer des emails à ${selected.length} enseignant(s) ? Cette action ne peut pas être annulée.`)) {
+        return;
+    }
+    
+    sendEmails(selected, false);
+}
+
+function sendSelectedTeamsDryRun() {
+    const selected = getSelectedInstructors();
+    if (selected.length === 0) {
+        alert('Veuillez sélectionner au moins un enseignant');
+        return;
+    }
+    sendTeamsMessages(selected, true);
+}
+
+function sendSelectedTeamsReal() {
+    const selected = getSelectedInstructors();
+    if (selected.length === 0) {
+        alert('Veuillez sélectionner au moins un enseignant');
+        return;
+    }
+    if (!confirm(`Envoyer des messages Teams à ${selected.length} enseignant(s) ?`)) return;
+    sendTeamsMessages(selected, false);
+}
+
+function sendEmails(instructorIds, dryRun) {
+    const resultsDiv = document.getElementById('report-results');
+    const content = document.getElementById('results-content');
+    
+    resultsDiv.style.display = 'block';
+    content.innerHTML = '<p>Traitement en cours...</p>';
+    
+    let completed = 0;
+    let results = [];
+    let emailPreviews = [];
+    
+    instructorIds.forEach(instId => {
+        fetch(`/api/send-reminder/${instId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dry_run: dryRun })
+        })
+        .then(response => response.json())
+        .then(data => {
+            completed++;
+            
+            if (data.success) {
+                results.push(`[OK] ${instId}: ${data.message}`);
+                if (dryRun && data.preview) {
+                    emailPreviews.push(data.preview);
+                }
+            } else {
+                results.push(`[ERREUR] ${instId}: ${data.error}`);
+            }
+            
+            if (completed === instructorIds.length) {
+                let html = '<pre>' + results.join('\n') + '</pre>';
+                
+                // Si dry run, afficher un bouton pour voir les templates
+                if (dryRun && emailPreviews.length > 0) {
+                    html += `<button class="btn btn-primary" onclick="showEmailPreviews()" style="margin-top: 10px;">📧 Voir les templates emails (${emailPreviews.length})</button>`;
+                    window.emailPreviews = emailPreviews; // Stocker globalement
+                }
+                
+                content.innerHTML = html;
+            }
+        })
+        .catch(error => {
+            completed++;
+            results.push(`[ERREUR] ${instId}: ${error.message}`);
+            
+            if (completed === instructorIds.length) {
+                content.innerHTML = '<pre>' + results.join('\n') + '</pre>';
+            }
+        });
+    });
+}
+
+function sendTeamsMessages(instructorIds, dryRun) {
+    const resultsDiv = document.getElementById('report-results');
+    const content = document.getElementById('results-content');
+    resultsDiv.style.display = 'block';
+    content.innerHTML = '<p>Traitement en cours (Teams)...</p>';
+
+    let completed = 0;
+    let results = [];
+    let previews = [];
+
+    instructorIds.forEach(instId => {
+        fetch(`/api/send-teams-reminder/${instId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dry_run: dryRun })
+        })
+        .then(r => r.json())
+        .then(data => {
+            completed++;
+            if (data.success) {
+                results.push(`[OK] ${instId}: ${data.message}`);
+                if (dryRun && data.preview) previews.push(data.preview);
+            } else {
+                results.push(`[ERREUR] ${instId}: ${data.error}`);
+            }
+            if (completed === instructorIds.length) {
+                let html = '<pre>' + results.join('\n') + '</pre>';
+                if (dryRun && previews.length > 0) {
+                    html += `<button class="btn btn-primary" onclick="showTeamsPreviews()" style="margin-top: 10px;">💬 Voir les messages Teams (${previews.length})</button>`;
+                    window.teamsPreviews = previews;
+                }
+                content.innerHTML = html;
+            }
+        })
+        .catch(err => {
+            completed++;
+            results.push(`[ERREUR] ${instId}: ${err.message}`);
+            if (completed === instructorIds.length) {
+                content.innerHTML = '<pre>' + results.join('\n') + '</pre>';
+            }
+        });
+    });
+}
+
+function showTeamsPreviews() {
+    if (!window.teamsPreviews) return;
+    const previewWindow = window.open('', 'Teams Previews', 'width=900,height=700,scrollbars=yes');
+    let html = `
+        <html><head><title>Teams Messages Preview</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+            .preview { background: white; margin-bottom: 20px; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        </style>
+        </head><body>
+        <h1>💬 Aperçu des Messages Teams - ${window.teamsPreviews.length}</h1>
+    `;
+    window.teamsPreviews.forEach((p, idx) => {
+        html += `<div class="preview"><h3>Message #${idx + 1}</h3>${p.content_html}</div>`;
+    });
+    html += '</body></html>';
+    previewWindow.document.write(html);
+}
+
+function showEmailPreviews() {
+    if (!window.emailPreviews) return;
+    
+    const previewWindow = window.open('', 'Email Previews', 'width=900,height=700,scrollbars=yes');
+    let html = `
+        <html>
+        <head>
+            <title>Email Templates Preview</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+                .preview-container { background: white; margin-bottom: 20px; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                .email-header { background: #f0f0f0; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
+                .email-body { border: 1px solid #ddd; padding: 20px; border-radius: 5px; background: white; }
+                h2 { color: #333; }
+            </style>
+        </head>
+        <body>
+            <h1>📧 Aperçu des Emails (Dry Run) - ${window.emailPreviews.length} email(s)</h1>
+    `;
+    
+    window.emailPreviews.forEach((preview, index) => {
+        html += `
+            <div class="preview-container">
+                <h2>Email #${index + 1}</h2>
+                <div class="email-header">
+                    <p><strong>À:</strong> ${preview.to}</p>
+                    <p><strong>Sujet:</strong> ${preview.subject}</p>
+                </div>
+                <div class="email-body">
+                    ${preview.full_body}
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</body></html>';
+    previewWindow.document.write(html);
+}
+
+function generateSummaryReport() {
+    fetch('/api/summary-report')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const container = document.getElementById('summary-report');
+                const content = document.getElementById('summary-content');
+                
+                content.textContent = data.report;
+                container.style.display = 'block';
+                container.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                alert('Error: ' + data.error);
+            }
+        });
+}
+</script>
+{% endblock %}

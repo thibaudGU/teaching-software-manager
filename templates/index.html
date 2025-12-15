@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero">
+    <h1>Système de Gestion des Logiciels Pédagogiques</h1>
+    <p>Suivez, gérez et vérifiez les besoins logiciels pour vos modules d'enseignement</p>
+</div>
+
+<div class="stats">
+    <div class="stat-card">
+        <h3>{{ instructors_count }}</h3>
+        <p>Enseignants</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ modules_count }}</h3>
+        <p>Modules d'Enseignement</p>
+    </div>
+</div>
+
+<div class="quick-links">
+    <h2>Actions Rapides</h2>
+    <div class="links-grid">
+        <a href="{{ url_for('view_instructors') }}" class="card-link">
+            <h3>👨‍🏫 Gérer les Enseignants</h3>
+            <p>Voir et gérer les informations des enseignants</p>
+        </a>
+        <a href="{{ url_for('view_modules') }}" class="card-link">
+            <h3>📖 Voir les Modules</h3>
+            <p>Parcourir tous les modules d'enseignement</p>
+        </a>
+        <a href="{{ url_for('view_reports') }}" class="card-link">
+            <h3>📊 Générer des Rapports</h3>
+            <p>Créer et envoyer des rappels de révision</p>
+        </a>
+        <a href="{{ url_for('view_settings') }}" class="card-link">
+            <h3>⚙️ Paramètres</h3>
+            <p>Configurer les paramètres système</p>
+        </a>
+    </div>
+</div>
+
+<div class="recent-updates">
+    <h2>Mises à Jour Récentes</h2>
+    <ul>
+        <li>Configuration validée le {{ now }}</li>
+        <li>Le système fonctionne normalement</li>
+        <li><a href="{{ url_for('health_check') }}">Voir l'état de santé</a></li>
+    </ul>
+</div>
+{% endblock %}

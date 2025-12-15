@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('view_instructors') }}">Instructors</a> &gt; {{ instructor.name }}
+</div>
+
+<h1>{{ instructor.name }}</h1>
+
+<div class="instructor-info">
+    <p><strong>Email:</strong> <a href="mailto:{{ instructor.email }}">{{ instructor.email }}</a></p>
+    <p><strong>Département:</strong> {{ instructor.get('department', 'N/A') }}</p>
+    <p><strong>Dernière Révision:</strong> {{ instructor.get('last_review', 'Jamais') }}</p>
+</div>
+
+<h2>Modules Assignés</h2>
+
+{% if modules %}
+<div class="modules-list">
+    {% for module in modules %}
+    <div class="module-summary">
+        <h3>
+            <a href="{{ url_for('view_module', module_id=module.id) }}">{{ module.name }}</a>
+        </h3>
+        <p>{{ module.description }}</p>
+        <p><strong>Année:</strong> {{ module.get('year', '?') }} | <strong>Semestre:</strong> {{ module.get('semester', '?') }}</p>
+        <p><strong>Logiciels:</strong> {{ module.software|length }}</p>
+        
+        <h4>Logiciels Critiques:</h4>
+        <ul>
+            {% for software in module.software %}
+                {% if software.get('critical', False) %}
+                <li>{{ software.name }} (v{{ software.version }})</li>
+                {% endif %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p>No modules assigned to this instructor.</p>
+{% endif %}
+
+<div class="actions">
+    <h2>Actions</h2>
+    <button class="btn btn-primary" onclick="generateReport('{{ instructor_id }}')">
+        📊 Générer un Rapport
+    </button>
+    <button class="btn btn-warning" onclick="sendReminder('{{ instructor_id }}', true)">
+        📧 Envoyer Email de Test (Simulation)
+    </button>
+    <button class="btn btn-danger" onclick="sendReminder('{{ instructor_id }}', false)">
+        📧 Envoyer Email
+    </button>
+    <button class="btn" onclick="sendTeamsReminder('{{ instructor_id }}', true)">
+        💬 Envoyer via Teams (Simulation)
+    </button>
+    <button class="btn" onclick="sendTeamsReminder('{{ instructor_id }}', false)">
+        💬 Envoyer via Teams
+    </button>
+</div>
+
+<div id="report-container" style="display:none; margin-top: 30px;">
+function sendTeamsReminder(instructorId, dryRun) {
+    const message = dryRun ? 'Simulation: message Teams' : 'Envoyer un message réel sur Teams ?';
+    if (!confirm(message)) return;
+
+    fetch(`/api/send-teams-reminder/${instructorId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dry_run: dryRun })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            if (dryRun && data.preview) {
+                const previewWindow = window.open('', 'Teams Preview', 'width=800,height=600,scrollbars=yes');
+                previewWindow.document.write(`
+                    <html>
+                    <head>
+                        <title>Teams Preview - ${data.preview.subject}</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; margin: 20px; }
+                            .msg { border: 1px solid #ddd; padding: 20px; border-radius: 5px; }
+                        </style>
+                    </head>
+                    <body>
+                        <h2>💬 Aperçu Teams (Dry Run)</h2>
+                        <p><strong>Cible:</strong> Canal Teams</p>
+                        <div class="msg">${data.preview.content_html}</div>
+                    </body>
+                    </html>
+                `);
+            } else {
+                alert('✓ ' + data.message);
+            }
+        } else {
+            alert('✗ Error: ' + data.error);
+        }
+    });
+}
+</script>
+    <h2>Generated Report</h2>
+    <iframe id="report-frame" style="width: 100%; height: 600px; border: 1px solid #ddd;"></iframe>
+</div>
+
+<script>
+function generateReport(instructorId) {
+    fetch(`/api/instructor/${instructorId}/report`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const container = document.getElementById('report-container');
+                const frame = document.getElementById('report-frame');
+                
+                frame.srcdoc = data.html;
+                container.style.display = 'block';
+                
+                // Scroll to report
+                container.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                alert('Error: ' + data.error);
+            }
+        });
+}
+
+function sendReminder(instructorId, dryRun) {
+    const message = dryRun ? 'This will simulate sending an email.' : 'This will send a real email. Continue?';
+    if (!confirm(message)) return;
+    
+    fetch(`/api/send-reminder/${instructorId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dry_run: dryRun })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            if (dryRun && data.preview) {
+                // Afficher le template email dans une nouvelle fenêtre
+                const previewWindow = window.open('', 'Email Preview', 'width=800,height=600,scrollbars=yes');
+                previewWindow.document.write(`
+                    <html>
+                    <head>
+                        <title>Email Preview - ${data.preview.subject}</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; margin: 20px; }
+                            .email-header { background: #f0f0f0; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+                            .email-body { border: 1px solid #ddd; padding: 20px; border-radius: 5px; }
+                        </style>
+                    </head>
+                    <body>
+                        <h2>📧 Aperçu Email (Dry Run)</h2>
+                        <div class="email-header">
+                            <p><strong>À:</strong> ${data.preview.to}</p>
+                            <p><strong>Sujet:</strong> ${data.preview.subject}</p>
+                        </div>
+                        <div class="email-body">
+                            ${data.preview.full_body}
+                        </div>
+                    </body>
+                    </html>
+                `);
+            } else {
+                alert('✓ ' + data.message);
+            }
+        } else {
+            alert('✗ Error: ' + data.error);
+        }
+    });
+}
+</script>
+{% endblock %}
