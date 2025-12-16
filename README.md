@@ -5,11 +5,13 @@ A comprehensive system for managing, tracking, and verifying software requiremen
 ## Features
 
 ✅ **Centralized Configuration** - YAML-based configuration for all instructors, modules, and software  
-✅ **Email Notifications** - Automatic reminder emails to instructors via university SMTP  
 ✅ **Web Interface** - User-friendly Flask web application for viewing and managing data  
-✅ **CLI Tool** - Command-line interface for automation and scripting  
-✅ **Report Generation** - Generate HTML and text reports for documentation  
+✅ **Excel Sync** - Export/import data to/from Excel files on OneDrive for collaboration  
+✅ **Email Notifications** - Automatic reminder emails to instructors (if SMTP available)  
+✅ **Report Generation** - Generate HTML reports for documentation  
 ✅ **Version Tracking** - Track software versions and last verified dates  
+✅ **Cloud Deployment** - Deploy to Render.com (free, always available)  
+✅ **CLI Tool** - Command-line interface for automation and scripting  
 
 ## Project Structure
 
@@ -92,8 +94,32 @@ Then open http://localhost:5000 in your browser.
 - View all instructors and their assigned modules
 - Browse software requirements per module
 - Generate and review instructor reports
+- **Export/Import Excel files** for collaboration on OneDrive
 - Send test emails or real review reminders
+- Check sync status between YAML and Excel
 - Configure system settings
+
+### Excel Synchronization
+
+Export your data to Excel, share it on OneDrive, and import updates back:
+
+1. **Export** : Reports → "📊 Synchronisation Excel" → "Exporter vers Excel"
+2. **Share** : Copy `teaching_software.xlsx` to your OneDrive shared folder
+3. **Edit** : Anyone with access can edit the Excel file
+4. **Import** : Back in the app → "Importer depuis Excel"
+
+See [EXCEL_SYNC_GUIDE.md](EXCEL_SYNC_GUIDE.md) for detailed instructions.
+
+### Cloud Deployment (Render)
+
+Deploy to Render for 24/7 availability (free tier):
+
+1. Push code to GitHub
+2. Connect GitHub repo to Render.com
+3. Set environment variables
+4. Auto-deploy on every push
+
+See [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) for step-by-step guide.
 
 ### Command-Line Interface
 

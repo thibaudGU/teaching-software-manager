@@ -26,6 +26,8 @@ Thumbs.db
 # Config (local)
 config/teaching_software.yml.backup
 *.backup
+config/*.xlsx
+
 
 # Render
 .env

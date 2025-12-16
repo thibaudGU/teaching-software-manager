@@ -26,18 +26,40 @@
         <button class="btn btn-danger" onclick="sendSelectedReal()">
             📧 Envoyer Emails Réels
         </button>
-        <button class="btn" onclick="sendSelectedTeamsDryRun()">
-            💬 Envoyer via Teams (Simulation)
-        </button>
-        <button class="btn" onclick="sendSelectedTeamsReal()">
-            💬 Envoyer via Teams (Réel)
-        </button>
+
     </div>
 </div>
 
 <div id="report-results" style="display:none; margin-top: 30px;">
     <h2>Résultats</h2>
     <div id="results-content"></div>
+</div>
+
+<hr>
+
+<div class="report-section">
+    <h2>📊 Synchronisation Excel</h2>
+    <p>Exporter/importer les données depuis/vers un fichier Excel partagé sur OneDrive.</p>
+    
+    <div class="sync-status" id="syncStatus" style="background: #f0f0f0; padding: 15px; border-radius: 5px; margin-bottom: 15px; display: none;">
+        <p id="syncStatusText"></p>
+    </div>
+    
+    <div class="actions">
+        <button class="btn btn-primary" onclick="checkSyncStatus()">
+            🔄 Vérifier l'état
+        </button>
+        <button class="btn btn-success" onclick="exportToExcel()">
+            💾 Exporter vers Excel
+        </button>
+        <button class="btn btn-info" onclick="importFromExcel()">
+            📥 Importer depuis Excel
+        </button>
+        <a href="/api/excel/download" 
+           class="btn btn-secondary" id="downloadBtn" style="display:none;" download="teaching_software.xlsx">
+            ⬇️ Télécharger le fichier Excel
+        </a>
+    </div>
 </div>
 
 <hr>
@@ -55,11 +77,35 @@
     <pre id="summary-content"></pre>
 </div>
 
+<!-- Modal SMTP sécurisé -->
+<div id="smtpModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeSmtpModal()">&times;</span>
+        <h3>Identifiants SMTP</h3>
+        <form onsubmit="submitSmtpCredentials(event)">
+            <div class="form-group">
+                <label for="smtp_username">Identifiant (ex: prenom.nom@univ-lr.fr)</label>
+                <input type="text" id="smtp_username" required>
+            </div>
+            <div class="form-group">
+                <label for="smtp_password">Mot de passe SMTP</label>
+                <input type="password" id="smtp_password" required>
+            </div>
+            <div class="actions" style="margin-top: 10px;">
+                <button type="submit" class="btn btn-danger">Envoyer</button>
+                <button type="button" class="btn" onclick="closeSmtpModal()">Annuler</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 function getSelectedInstructors() {
     const checkboxes = document.querySelectorAll('.instructor-checkbox:checked');
     return Array.from(checkboxes).map(cb => cb.value);
 }
+
+let pendingRealInstructorIds = [];
 
 function sendSelectedDryRun() {
     const selected = getSelectedInstructors();
@@ -77,34 +123,32 @@ function sendSelectedReal() {
         alert('Veuillez sélectionner au moins un enseignant');
         return;
     }
-    
-    if (!confirm(`Envoyer des emails à ${selected.length} enseignant(s) ? Cette action ne peut pas être annulée.`)) {
-        return;
-    }
-    
-    sendEmails(selected, false);
+
+    pendingRealInstructorIds = selected;
+    document.getElementById('smtp_username').value = '';
+    document.getElementById('smtp_password').value = '';
+    document.getElementById('smtpModal').style.display = 'block';
 }
 
-function sendSelectedTeamsDryRun() {
-    const selected = getSelectedInstructors();
-    if (selected.length === 0) {
-        alert('Veuillez sélectionner au moins un enseignant');
-        return;
-    }
-    sendTeamsMessages(selected, true);
+function closeSmtpModal() {
+    document.getElementById('smtpModal').style.display = 'none';
 }
 
-function sendSelectedTeamsReal() {
-    const selected = getSelectedInstructors();
-    if (selected.length === 0) {
-        alert('Veuillez sélectionner au moins un enseignant');
+function submitSmtpCredentials(event) {
+    event.preventDefault();
+    const username = document.getElementById('smtp_username').value.trim();
+    const password = document.getElementById('smtp_password').value;
+
+    if (!username || !password) {
+        alert('Identifiant et mot de passe requis');
         return;
     }
-    if (!confirm(`Envoyer des messages Teams à ${selected.length} enseignant(s) ?`)) return;
-    sendTeamsMessages(selected, false);
+
+    closeSmtpModal();
+    sendEmails(pendingRealInstructorIds, false, username, password);
 }
 
-function sendEmails(instructorIds, dryRun) {
+function sendEmails(instructorIds, dryRun, smtpUser = null, smtpPass = null) {
     const resultsDiv = document.getElementById('report-results');
     const content = document.getElementById('results-content');
     
@@ -116,10 +160,16 @@ function sendEmails(instructorIds, dryRun) {
     let emailPreviews = [];
     
     instructorIds.forEach(instId => {
+        const payload = { dry_run: dryRun };
+        if (!dryRun) {
+            payload.smtp_username = smtpUser;
+            payload.smtp_password = smtpPass;
+        }
+        
         fetch(`/api/send-reminder/${instId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dry_run: dryRun })
+            body: JSON.stringify(payload)
         })
         .then(response => response.json())
         .then(data => {
@@ -137,9 +187,9 @@ function sendEmails(instructorIds, dryRun) {
             if (completed === instructorIds.length) {
                 let html = '<pre>' + results.join('\n') + '</pre>';
                 
-                // Si dry run, afficher un bouton pour voir les templates
+                // Si dry run, afficher un bouton pour voir les aperçus
                 if (dryRun && emailPreviews.length > 0) {
-                    html += `<button class="btn btn-primary" onclick="showEmailPreviews()" style="margin-top: 10px;">📧 Voir les templates emails (${emailPreviews.length})</button>`;
+                    html += `<button class="btn btn-primary" onclick="showEmailPreviews()" style="margin-top: 10px;">📧 Voir les aperçus d’emails (${emailPreviews.length})</button>`;
                     window.emailPreviews = emailPreviews; // Stocker globalement
                 }
                 
@@ -157,77 +207,14 @@ function sendEmails(instructorIds, dryRun) {
     });
 }
 
-function sendTeamsMessages(instructorIds, dryRun) {
-    const resultsDiv = document.getElementById('report-results');
-    const content = document.getElementById('results-content');
-    resultsDiv.style.display = 'block';
-    content.innerHTML = '<p>Traitement en cours (Teams)...</p>';
-
-    let completed = 0;
-    let results = [];
-    let previews = [];
-
-    instructorIds.forEach(instId => {
-        fetch(`/api/send-teams-reminder/${instId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dry_run: dryRun })
-        })
-        .then(r => r.json())
-        .then(data => {
-            completed++;
-            if (data.success) {
-                results.push(`[OK] ${instId}: ${data.message}`);
-                if (dryRun && data.preview) previews.push(data.preview);
-            } else {
-                results.push(`[ERREUR] ${instId}: ${data.error}`);
-            }
-            if (completed === instructorIds.length) {
-                let html = '<pre>' + results.join('\n') + '</pre>';
-                if (dryRun && previews.length > 0) {
-                    html += `<button class="btn btn-primary" onclick="showTeamsPreviews()" style="margin-top: 10px;">💬 Voir les messages Teams (${previews.length})</button>`;
-                    window.teamsPreviews = previews;
-                }
-                content.innerHTML = html;
-            }
-        })
-        .catch(err => {
-            completed++;
-            results.push(`[ERREUR] ${instId}: ${err.message}`);
-            if (completed === instructorIds.length) {
-                content.innerHTML = '<pre>' + results.join('\n') + '</pre>';
-            }
-        });
-    });
-}
-
-function showTeamsPreviews() {
-    if (!window.teamsPreviews) return;
-    const previewWindow = window.open('', 'Teams Previews', 'width=900,height=700,scrollbars=yes');
-    let html = `
-        <html><head><title>Teams Messages Preview</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-            .preview { background: white; margin-bottom: 20px; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        </style>
-        </head><body>
-        <h1>💬 Aperçu des Messages Teams - ${window.teamsPreviews.length}</h1>
-    `;
-    window.teamsPreviews.forEach((p, idx) => {
-        html += `<div class="preview"><h3>Message #${idx + 1}</h3>${p.content_html}</div>`;
-    });
-    html += '</body></html>';
-    previewWindow.document.write(html);
-}
-
 function showEmailPreviews() {
     if (!window.emailPreviews) return;
     
-    const previewWindow = window.open('', 'Email Previews', 'width=900,height=700,scrollbars=yes');
+    const previewWindow = window.open('', 'Aperçu Emails', 'width=900,height=700,scrollbars=yes');
     let html = `
         <html>
         <head>
-            <title>Email Templates Preview</title>
+            <title>Aperçu des e-mails</title>
             <style>
                 body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
                 .preview-container { background: white; margin-bottom: 20px; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -237,19 +224,20 @@ function showEmailPreviews() {
             </style>
         </head>
         <body>
-            <h1>📧 Aperçu des Emails (Dry Run) - ${window.emailPreviews.length} email(s)</h1>
+            <h1>📧 Aperçu des e-mails (simulation) - ${window.emailPreviews.length} e-mail(s)</h1>
     `;
     
     window.emailPreviews.forEach((preview, index) => {
         html += `
             <div class="preview-container">
-                <h2>Email #${index + 1}</h2>
+                <h2>E-mail n°${index + 1}</h2>
                 <div class="email-header">
+                    <p><strong>De :</strong> ${preview.from || '—'}</p>
                     <p><strong>À:</strong> ${preview.to}</p>
-                    <p><strong>Sujet:</strong> ${preview.subject}</p>
+                    <p><strong>Sujet :</strong> ${preview.subject}</p>
                 </div>
                 <div class="email-body">
-                    ${preview.full_body}
+                    ${preview.html || preview.full_body || ''}
                 </div>
             </div>
         `;
@@ -271,7 +259,79 @@ function generateSummaryReport() {
                 container.style.display = 'block';
                 container.scrollIntoView({ behavior: 'smooth' });
             } else {
-                alert('Error: ' + data.error);
+                alert('Erreur : ' + data.error);
+            }
+        });
+}
+
+function checkSyncStatus() {
+    fetch('/api/excel/status')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.status) {
+                const status = data.status;
+                
+                // Ensure status has expected structure
+                if (!status.yaml || !status.excel) {
+                    throw new Error('Structure de statut invalide : éléments yaml ou excel manquants');
+                }
+                
+                let html = '<strong>État de la synchronisation :</strong><br>';
+                html += `YAML : ${status.yaml.instructors} enseignants, ${status.yaml.modules} modules<br>`;
+                html += `Excel : ${status.excel.instructors} enseignants, ${status.excel.modules} modules<br>`;
+                html += `<small>Fichier: ${status.excel_path}</small>`;
+                
+                if (status.error) {
+                    html += `<br><small style="color: red;">⚠️ ${status.error}</small>`;
+                }
+                
+                document.getElementById('syncStatusText').innerHTML = html;
+                document.getElementById('syncStatus').style.display = 'block';
+                
+                // Show download button if Excel file exists
+                if (status.excel_exists) {
+                    document.getElementById('downloadBtn').style.display = 'inline-block';
+                }
+            } else {
+                alert('Erreur : ' + (data.error || 'Erreur inconnue'));
+            }
+        })
+        .catch(err => {
+            alert('Erreur lors de la vérification de la synchronisation : ' + err.message);
+        });
+}
+
+function exportToExcel() {
+    if (!confirm('Exporter les données actuelles vers Excel ?')) return;
+    
+    fetch('/api/excel/export', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('✓ ' + data.message);
+                checkSyncStatus();
+            } else {
+                alert('✗ Erreur : ' + (data.error || 'Erreur inconnue'));
+            }
+        })
+        .catch(err => {
+            alert('✗ Erreur : ' + err.message);
+        });
+}
+
+function importFromExcel() {
+    if (!confirm('Importer les données depuis Excel vers YAML ? Cette action va remplacer les données actuelles.')) return;
+    
+    fetch('/api/excel/import', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('✓ ' + data.message);
+                checkSyncStatus();
+                // Reload page after 1 second
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                alert('✗ Erreur : ' + data.error);
             }
         });
 }

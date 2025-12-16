@@ -209,6 +209,18 @@ class ConfigWriter:
             
             software_data['last_verified'] = datetime.now().strftime('%Y-%m-%d')
             config['modules'][module_id]['software'].append(software_data)
+
+            # Audit log: software added
+            audit_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'module_id': module_id,
+                'software_name': software_data.get('name', ''),
+                'action': 'added',
+                'actor': software_data.get('verified_by') or software_data.get('updated_by') or '',
+            }
+            if 'audit_log' not in config:
+                config['audit_log'] = []
+            config['audit_log'].append(audit_entry)
             
             self._save_config(config)
             return True
@@ -231,7 +243,30 @@ class ConfigWriter:
             # Find and update the software
             for idx, software in enumerate(config['modules'][module_id]['software']):
                 if software.get('name') == software_name:
+                    # Compute changes for audit
+                    changes = []
+                    for key, new_val in software_data.items():
+                        old_val = software.get(key)
+                        if old_val != new_val:
+                            changes.append({'field': key, 'old': old_val, 'new': new_val})
+
+                    # Apply update
                     config['modules'][module_id]['software'][idx].update(software_data)
+
+                    # Audit log: software updated
+                    if changes:
+                        audit_entry = {
+                            'timestamp': datetime.now().isoformat(),
+                            'module_id': module_id,
+                            'software_name': software_name,
+                            'action': 'updated',
+                            'actor': software_data.get('verified_by') or software_data.get('updated_by') or '',
+                            'changes': changes,
+                        }
+                        if 'audit_log' not in config:
+                            config['audit_log'] = []
+                        config['audit_log'].append(audit_entry)
+
                     self._save_config(config)
                     return True
             
@@ -253,13 +288,31 @@ class ConfigWriter:
                 return False
             
             # Find and remove the software
-            original_length = len(config['modules'][module_id]['software'])
-            config['modules'][module_id]['software'] = [
-                s for s in config['modules'][module_id]['software']
-                if s.get('name') != software_name
-            ]
+            original_list = config['modules'][module_id]['software']
+            original_length = len(original_list)
+            remaining = []
+            removed_item = None
+            for s in original_list:
+                if s.get('name') == software_name:
+                    removed_item = s
+                else:
+                    remaining.append(s)
+
+            config['modules'][module_id]['software'] = remaining
             
-            if len(config['modules'][module_id]['software']) < original_length:
+            if len(remaining) < original_length:
+                # Audit log: software deleted
+                audit_entry = {
+                    'timestamp': datetime.now().isoformat(),
+                    'module_id': module_id,
+                    'software_name': software_name,
+                    'action': 'deleted',
+                    'actor': '',
+                }
+                if 'audit_log' not in config:
+                    config['audit_log'] = []
+                config['audit_log'].append(audit_entry)
+
                 self._save_config(config)
                 return True
             

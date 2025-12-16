@@ -90,9 +90,7 @@ class ConfigLoader:
         """Get report configuration."""
         return self.config.get('report_config', {})
 
-    def get_teams_config(self) -> Dict[str, Any]:
-        """Get Teams Webhook configuration."""
-        return self.config.get('teams_config', {})
+
 
     def get_module_software(self, module_id: str) -> List[Dict[str, Any]]:
         """Get all software for a specific module."""

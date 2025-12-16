@@ -9,10 +9,10 @@ from pathlib import Path
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from flask import Flask, render_template, request, jsonify, flash, redirect, url_for
+from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, send_file
 from config_loader import ConfigLoader
 from email_notifier import EmailNotifier
-from teams_webhook_notifier import TeamsWebhookNotifier
+from excel_sync import ExcelSyncManager
 from config_writer import ConfigWriter
 import yaml
 from datetime import datetime
@@ -23,15 +23,16 @@ app.secret_key = 'teaching-software-manager-secret'
 # Load configuration
 config_loader = ConfigLoader()
 email_notifier = EmailNotifier(config_loader)
-teams_notifier = TeamsWebhookNotifier(config_loader)
+
+excel_sync = ExcelSyncManager(config_loader)
 config_writer = ConfigWriter()
 
 def reload_config():
     """Reload configuration after changes."""
-    global config_loader, email_notifier, teams_notifier
+    global config_loader, email_notifier, excel_sync
     config_loader = ConfigLoader()
     email_notifier = EmailNotifier(config_loader)
-    teams_notifier = TeamsWebhookNotifier(config_loader)
+    excel_sync = ExcelSyncManager(config_loader)
 
 @app.template_filter('instructor_name')
 def instructor_name_filter(instructor_id):
@@ -110,6 +111,14 @@ def view_reports():
     return render_template('reports.html', instructors=instructors)
 
 
+@app.route('/verification')
+def view_verification():
+    """Verification page for managing software and OS per instructor-module."""
+    instructors = config_loader.get_instructors()
+    modules = config_loader.get_modules()
+    return render_template('verification.html', instructors=instructors, modules=modules)
+
+
 @app.route('/api/instructor/<instructor_id>/report')
 def get_instructor_report(instructor_id):
     """Get HTML report for an instructor (API)."""
@@ -131,79 +140,30 @@ def send_reminder(instructor_id):
     """Send a review reminder email to an instructor (API)."""
     try:
         dry_run = request.json.get('dry_run', True)
+        smtp_username = request.json.get('smtp_username', '')
+        smtp_password = request.json.get('smtp_password', '')
+        
         instructor = config_loader.get_instructor(instructor_id)
+        subject = f"Vérification des logiciels d'enseignement - {instructor['name']}"
         
-        html_report = email_notifier.generate_instructor_report_html(instructor_id)
-        subject = f"Teaching Software Review Required - {instructor['name']}"
+        result = email_notifier.send_reminder(
+            instructor_id=instructor_id,
+            subject=subject,
+            dry_run=dry_run,
+            smtp_username=smtp_username if not dry_run else None,
+            smtp_password=smtp_password if not dry_run else None
+        )
         
-        if dry_run:
-            return jsonify({
-                'success': True,
-                'message': f'[DRY RUN] Would send email to {instructor["email"]}',
-                'preview': {
-                    'to': instructor['email'],
-                    'subject': subject,
-                    'body_preview': html_report[:500] + '...',
-                    'full_body': html_report
-                }
-            })
+        if result['success']:
+            return jsonify(result)
         else:
-            success = email_notifier.send_email(
-                to_email=instructor['email'],
-                subject=subject,
-                html_body=html_report
-            )
-            
-            if success:
-                return jsonify({
-                    'success': True,
-                    'message': f'Email sent to {instructor["email"]}'
-                })
-            else:
-                return jsonify({
-                    'success': False,
-                    'error': 'Failed to send email'
-                }), 500
+            return jsonify(result), 400
     
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e)
         }), 400
-
-
-@app.route('/api/send-teams-reminder/<instructor_id>', methods=['POST'])
-def send_teams_reminder(instructor_id):
-    """Send a Teams reminder via Webhook for an instructor."""
-    try:
-        dry_run = request.json.get('dry_run', True)
-        instructor = config_loader.get_instructor(instructor_id)
-        modules = config_loader.get_instructor_module_details(instructor_id)
-
-        subject = f"Revue des logiciels d'enseignement"
-        module_count = len(modules)
-
-        res = teams_notifier.send_reminder(
-            instructor_id=instructor_id,
-            instructor_name=instructor['name'],
-            subject=subject,
-            module_count=module_count,
-            dry_run=dry_run,
-        )
-
-        if res.get('success'):
-            if dry_run and res.get('preview'):
-                return jsonify({
-                    'success': True,
-                    'message': '[DRY RUN] Teams message preview',
-                    'preview': res.get('preview')
-                })
-            return jsonify({'success': True, 'message': res.get('message', 'Teams message sent')})
-        else:
-            return jsonify({'success': False, 'error': res.get('error', 'Failed to send Teams message')}), 400
-
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
 
 
 @app.route('/api/summary-report')
@@ -271,6 +231,28 @@ def add_instructor():
         success = config_writer.add_instructor(instructor_id, instructor_data)
         
         if success:
+            # Enforce single-responsibility: reassign listed modules to this instructor
+            try:
+                modules_to_assign = instructor_data.get('modules', []) or []
+                if modules_to_assign:
+                    # Remove module from all other instructors and set module's instructor_id
+                    all_instructors = config_loader.get_instructors()
+                    for mod_id in modules_to_assign:
+                        # Remove from others
+                        for inst_id, inst_data in all_instructors.items():
+                            if inst_id != instructor_id:
+                                mods = inst_data.get('modules', [])
+                                if mod_id in mods:
+                                    mods.remove(mod_id)
+                                    config_writer.update_instructor(inst_id, {'modules': mods})
+                        # Set module's instructor_id to this instructor
+                        try:
+                            config_writer.update_module(mod_id, {'instructor_id': instructor_id})
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
             reload_config()
             return jsonify({'success': True, 'message': 'Enseignant ajouté avec succès'})
         else:
@@ -299,6 +281,35 @@ def update_instructor(instructor_id):
         success = config_writer.update_instructor(instructor_id, instructor_data)
         
         if success:
+            # If modules updated, enforce single-responsibility
+            try:
+                if 'modules' in data:
+                    new_modules = data.get('modules', []) or []
+                    # Remove these modules from any other instructor and set module's instructor_id
+                    all_instructors = config_loader.get_instructors()
+                    for mod_id in new_modules:
+                        for inst_id, inst_data in all_instructors.items():
+                            if inst_id != instructor_id:
+                                mods = inst_data.get('modules', [])
+                                if mod_id in mods:
+                                    mods.remove(mod_id)
+                                    config_writer.update_instructor(inst_id, {'modules': mods})
+                        try:
+                            config_writer.update_module(mod_id, {'instructor_id': instructor_id})
+                        except Exception:
+                            pass
+                    # For modules removed from this instructor, clear instructor_id
+                    try:
+                        current_inst = config_loader.get_instructor(instructor_id)
+                        old_modules = current_inst.get('modules', [])
+                        removed = [m for m in old_modules if m not in new_modules]
+                        for mod_id in removed:
+                            config_writer.update_module(mod_id, {'instructor_id': ''})
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
             reload_config()
             return jsonify({'success': True, 'message': 'Enseignant modifié avec succès'})
         else:
@@ -345,21 +356,31 @@ def add_module():
             'year': int(data.get('year', 1)),
             'code': data.get('code', ''),
             'os_required': data.get('os_required', []),
-            'software': data.get('software', [])
+            'software': data.get('software', []),
+            'instructor_id': data.get('instructor_id', '')
         }
         
         success = config_writer.add_module(module_id, module_data)
 
         if success:
-            # Si un enseignant est assigné, ajouter le module à sa liste
+            # Si un enseignant est assigné, appliquer l'unicité
             instructor_id = data.get('instructor_id')
             if instructor_id:
                 try:
-                    instructor = config_loader.get_instructor(instructor_id)
-                    modules = instructor.get('modules', [])
-                    if module_id not in modules:
-                        modules.append(module_id)
-                        config_writer.update_instructor(instructor_id, {'modules': modules})
+                    # Retirer le module de tous les autres enseignants
+                    all_instructors = config_loader.get_instructors()
+                    for inst_id, inst_data in all_instructors.items():
+                        mods = inst_data.get('modules', [])
+                        if module_id in mods and inst_id != instructor_id:
+                            mods.remove(module_id)
+                            config_writer.update_instructor(inst_id, {'modules': mods})
+
+                    # Ajouter le module à l'enseignant cible s'il n'y est pas
+                    target = config_loader.get_instructor(instructor_id)
+                    target_mods = target.get('modules', [])
+                    if module_id not in target_mods:
+                        target_mods.append(module_id)
+                        config_writer.update_instructor(instructor_id, {'modules': target_mods})
                 except ValueError:
                     pass  # Enseignant non trouvé, ignorer
             
@@ -391,6 +412,8 @@ def update_module(module_id):
             module_data['code'] = data['code']
         if 'os_required' in data:
             module_data['os_required'] = data['os_required']
+        if 'instructor_id' in data:
+            module_data['instructor_id'] = data['instructor_id']
         
         success = config_writer.update_module(module_id, module_data)
 
@@ -521,6 +544,50 @@ def delete_software(module_id, software_name):
         return jsonify({'success': False, 'error': str(e)}), 400
 
 
+@app.route('/api/excel/export', methods=['POST'])
+def excel_export():
+    """Export YAML config to Excel file."""
+    try:
+        success, message = excel_sync.export_to_excel()
+        return jsonify({'success': success, 'message': message})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/excel/import', methods=['POST'])
+def excel_import():
+    """Import data from Excel file to YAML config."""
+    try:
+        success, message = excel_sync.import_from_excel()
+        if success:
+            reload_config()
+        return jsonify({'success': success, 'message': message})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/excel/status', methods=['GET'])
+def excel_status():
+    """Get sync status between YAML and Excel."""
+    try:
+        status = excel_sync.get_sync_status()
+        return jsonify({'success': True, 'status': status})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/excel/download')
+def excel_download():
+    """Serve the Excel file for download."""
+    try:
+        path = excel_sync.excel_path
+        if not path.exists():
+            return jsonify({'success': False, 'error': 'Excel file not found'}), 404
+        return send_file(str(path), as_attachment=True, download_name=path.name)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors."""
@@ -538,12 +605,16 @@ if __name__ == '__main__':
     is_valid, errors = config_loader.validate_config()
     
     if not is_valid:
-        print("⚠ Configuration validation errors:")
+        print("[!] Configuration validation errors:")
         for error in errors:
             print(f"  - {error}")
         print("\nStarting application anyway...\n")
     else:
-        print("✓ Configuration is valid\n")
+        print("[OK] Configuration is valid\n")
+    
+    # Create Excel file if it doesn't exist
+    excel_sync._ensure_excel_exists()
+    print("[OK] Excel file ready at", excel_sync.excel_path)
     
     # Start the Flask development server
     print("Starting Teaching Software Manager web interface...")

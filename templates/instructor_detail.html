@@ -2,15 +2,14 @@
 
 {% block content %}
 <div class="breadcrumb">
-    <a href="{{ url_for('view_instructors') }}">Instructors</a> &gt; {{ instructor.name }}
+    <a href="{{ url_for('view_instructors') }}">Enseignants</a> &gt; {{ instructor.name }}
 </div>
 
 <h1>{{ instructor.name }}</h1>
 
 <div class="instructor-info">
-    <p><strong>Email:</strong> <a href="mailto:{{ instructor.email }}">{{ instructor.email }}</a></p>
-    <p><strong>Département:</strong> {{ instructor.get('department', 'N/A') }}</p>
-    <p><strong>Dernière Révision:</strong> {{ instructor.get('last_review', 'Jamais') }}</p>
+    <p><strong>Email :</strong> <a href="mailto:{{ instructor.email }}">{{ instructor.email }}</a></p>
+    <p><strong>Dernière révision :</strong> {{ instructor.get('last_review', 'Jamais') }}</p>
 </div>
 
 <h2>Modules Assignés</h2>
@@ -26,19 +25,24 @@
         <p><strong>Année:</strong> {{ module.get('year', '?') }} | <strong>Semestre:</strong> {{ module.get('semester', '?') }}</p>
         <p><strong>Logiciels:</strong> {{ module.software|length }}</p>
         
-        <h4>Logiciels Critiques:</h4>
+        <h4>Logiciels requis:</h4>
         <ul>
             {% for software in module.software %}
+            <li>
+                {{ software.name }} (v{{ software.version }})
                 {% if software.get('critical', False) %}
-                <li>{{ software.name }} (v{{ software.version }})</li>
+                <span style="color: red; font-weight: bold;">⚠ CRITIQUE</span>
                 {% endif %}
+            </li>
             {% endfor %}
         </ul>
+        
+        <p><a href="{{ url_for('view_verification') }}" class="btn btn-primary">🔍 Modifier les logiciels et OS</a></p>
     </div>
     {% endfor %}
 </div>
 {% else %}
-<p>No modules assigned to this instructor.</p>
+<p>Aucun module assigné à cet enseignant.</p>
 {% endif %}
 
 <div class="actions">
@@ -52,55 +56,10 @@
     <button class="btn btn-danger" onclick="sendReminder('{{ instructor_id }}', false)">
         📧 Envoyer Email
     </button>
-    <button class="btn" onclick="sendTeamsReminder('{{ instructor_id }}', true)">
-        💬 Envoyer via Teams (Simulation)
-    </button>
-    <button class="btn" onclick="sendTeamsReminder('{{ instructor_id }}', false)">
-        💬 Envoyer via Teams
-    </button>
 </div>
 
 <div id="report-container" style="display:none; margin-top: 30px;">
-function sendTeamsReminder(instructorId, dryRun) {
-    const message = dryRun ? 'Simulation: message Teams' : 'Envoyer un message réel sur Teams ?';
-    if (!confirm(message)) return;
-
-    fetch(`/api/send-teams-reminder/${instructorId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dry_run: dryRun })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            if (dryRun && data.preview) {
-                const previewWindow = window.open('', 'Teams Preview', 'width=800,height=600,scrollbars=yes');
-                previewWindow.document.write(`
-                    <html>
-                    <head>
-                        <title>Teams Preview - ${data.preview.subject}</title>
-                        <style>
-                            body { font-family: Arial, sans-serif; margin: 20px; }
-                            .msg { border: 1px solid #ddd; padding: 20px; border-radius: 5px; }
-                        </style>
-                    </head>
-                    <body>
-                        <h2>💬 Aperçu Teams (Dry Run)</h2>
-                        <p><strong>Cible:</strong> Canal Teams</p>
-                        <div class="msg">${data.preview.content_html}</div>
-                    </body>
-                    </html>
-                `);
-            } else {
-                alert('✓ ' + data.message);
-            }
-        } else {
-            alert('✗ Error: ' + data.error);
-        }
-    });
-}
-</script>
-    <h2>Generated Report</h2>
+    <h2>Rapport généré</h2>
     <iframe id="report-frame" style="width: 100%; height: 600px; border: 1px solid #ddd;"></iframe>
 </div>
 
@@ -119,24 +78,22 @@ function generateReport(instructorId) {
                 // Scroll to report
                 container.scrollIntoView({ behavior: 'smooth' });
             } else {
-                alert('Error: ' + data.error);
+                alert('Erreur : ' + data.error);
             }
         });
 }
 
 function sendReminder(instructorId, dryRun) {
-    const message = dryRun ? 'This will simulate sending an email.' : 'This will send a real email. Continue?';
-    if (!confirm(message)) return;
-    
-    fetch(`/api/send-reminder/${instructorId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dry_run: dryRun })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            if (dryRun && data.preview) {
+    if (dryRun) {
+        // Dry run - pas besoin d'identifiants
+        fetch(`/api/send-reminder/${instructorId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dry_run: true })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.preview) {
                 // Afficher le template email dans une nouvelle fenêtre
                 const previewWindow = window.open('', 'Email Preview', 'width=800,height=600,scrollbars=yes');
                 previewWindow.document.write(`
@@ -152,21 +109,106 @@ function sendReminder(instructorId, dryRun) {
                     <body>
                         <h2>📧 Aperçu Email (Dry Run)</h2>
                         <div class="email-header">
+                            <p><strong>De:</strong> ${data.preview.from || '—'}</p>
                             <p><strong>À:</strong> ${data.preview.to}</p>
                             <p><strong>Sujet:</strong> ${data.preview.subject}</p>
                         </div>
                         <div class="email-body">
-                            ${data.preview.full_body}
+                            ${data.preview.html}
                         </div>
                     </body>
                     </html>
                 `);
             } else {
-                alert('✓ ' + data.message);
+                alert('✓ ' + (data.message || 'Aperçu généré'));
             }
-        } else {
-            alert('✗ Error: ' + data.error);
-        }
+        })
+        .catch(err => alert('✗ Erreur: ' + err.message));
+    } else {
+        // Envoi réel - modal avec mot de passe masqué
+        askSmtpCredentials().then(creds => {
+            if (!creds) return;
+
+            fetch(`/api/send-reminder/${instructorId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    dry_run: false,
+                    smtp_username: creds.username,
+                    smtp_password: creds.password
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✓ ' + data.message);
+                } else {
+                    alert('✗ Erreur: ' + (data.error || 'Échec de l\'envoi'));
+                }
+            })
+            .catch(err => alert('✗ Erreur: ' + err.message));
+        });
+    }
+}
+
+// Modale simple pour saisir identifiant + mot de passe (mot de passe masqué)
+function askSmtpCredentials() {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.background = 'rgba(0,0,0,0.4)';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '9999';
+
+        const modal = document.createElement('div');
+        modal.style.background = '#fff';
+        modal.style.padding = '20px';
+        modal.style.borderRadius = '8px';
+        modal.style.width = '320px';
+        modal.style.boxShadow = '0 4px 10px rgba(0,0,0,0.2)';
+
+        modal.innerHTML = `
+            <h3>Identifiants SMTP</h3>
+            <div class="form-group">
+                <label>Identifiant (ex: prenom.nom@univ-lr.fr)</label>
+                <input type="text" id="smtp_user_input" style="width: 100%; padding: 8px; margin: 5px 0;" />
+            </div>
+            <div class="form-group">
+                <label>Mot de passe</label>
+                <input type="password" id="smtp_pass_input" style="width: 100%; padding: 8px; margin: 5px 0;" />
+            </div>
+            <div style="text-align: right; margin-top: 10px;">
+                <button id="smtp_cancel_btn" class="btn" style="margin-right: 8px;">Annuler</button>
+                <button id="smtp_ok_btn" class="btn btn-primary">Continuer</button>
+            </div>
+        `;
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        const cleanup = () => overlay.remove();
+
+        modal.querySelector('#smtp_cancel_btn').onclick = () => {
+            cleanup();
+            resolve(null);
+        };
+
+        modal.querySelector('#smtp_ok_btn').onclick = () => {
+            const username = modal.querySelector('#smtp_user_input').value.trim();
+            const password = modal.querySelector('#smtp_pass_input').value;
+            if (!username || !password) {
+                alert('Identifiant et mot de passe requis');
+                return;
+            }
+            cleanup();
+            resolve({ username, password });
+        };
     });
 }
 </script>

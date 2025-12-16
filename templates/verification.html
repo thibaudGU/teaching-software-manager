@@ -1,0 +1,371 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>🔍 Vérification et Mise à Jour des Logiciels et OS</h1>
+<p>Sélectionnez un enseignant et un module pour mettre à jour les logiciels et OS requis.</p>
+
+<div class="verification-section" style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+        <div class="form-group">
+            <label><strong>1. Sélectionner un enseignant:</strong></label>
+            <select id="instructorSelect" onchange="updateModuleList()">
+                <option value="">-- Choisir un enseignant --</option>
+                {% for inst_id, instructor in instructors.items() %}
+                <option value="{{ inst_id }}" data-modules="{{ instructor.get('modules', [])|tojson }}">
+                    {{ instructor.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label><strong>2. Sélectionner un module:</strong></label>
+            <select id="moduleSelect" onchange="loadModuleDetails()">
+                <option value="">-- Choisir un module --</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div id="moduleDetails" style="display: none;">
+    <!-- Informations du module -->
+    <div class="module-info" style="background: #e8f4f8; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h2 id="moduleName"></h2>
+        <p id="moduleDesc"></p>
+        <p><strong>Code:</strong> <span id="moduleCode"></span> | <strong>Année:</strong> <span id="moduleYear"></span> | <strong>Semestre:</strong> <span id="moduleSemester"></span></p>
+    </div>
+
+    <!-- Systèmes d'exploitation requis -->
+    <div class="os-section" style="margin-bottom: 30px;">
+        <h3>📋 Systèmes d'exploitation requis</h3>
+        <div id="osList" style="background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px;">
+            <!-- Populated by JS -->
+        </div>
+        <div style="background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
+            <h4>Ajouter un OS</h4>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="newOSName" placeholder="ex: Windows 11, Ubuntu 24.04" style="flex: 1;">
+                <button class="btn btn-success" onclick="addOS()">➕ Ajouter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logiciels -->
+    <div class="software-section">
+        <h3>💻 Logiciels requis</h3>
+        <div id="softwareList" style="background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px;">
+            <!-- Populated by JS -->
+        </div>
+        <div style="background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
+            <h4>Ajouter un logiciel</h4>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr) 1fr 1fr 200px; gap: 10px; margin-bottom: 10px;">
+                <input type="text" id="newSoftName" placeholder="Nom du logiciel" required>
+                <input type="text" id="newSoftVersion" placeholder="Version">
+                <input type="text" id="newSoftPurpose" placeholder="Finalité">
+                <label style="display: flex; align-items: center;"><input type="checkbox" id="newSoftCritical"> Critique</label>
+                <input type="text" id="newSoftNotes" placeholder="Notes" style="grid-column: span 1;">
+                <button class="btn btn-success" onclick="addSoftware()">➕ Ajouter</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Store all modules data for filtering
+const allModules = {
+    {% for mod_id, module in modules.items() %}
+    '{{ mod_id }}': {{ module|tojson }},
+    {% endfor %}
+};
+
+const allInstructors = {
+    {% for inst_id, instructor in instructors.items() %}
+    '{{ inst_id }}': {{ instructor|tojson }},
+    {% endfor %}
+};
+
+function updateModuleList() {
+    const instructorSelect = document.getElementById('instructorSelect');
+    const moduleSelect = document.getElementById('moduleSelect');
+    const selectedInstructorId = instructorSelect.value;
+
+    moduleSelect.innerHTML = '<option value="">-- Choisir un module --</option>';
+    document.getElementById('moduleDetails').style.display = 'none';
+
+    if (!selectedInstructorId) return;
+
+    const instructor = allInstructors[selectedInstructorId];
+    const moduleIds = instructor.modules || [];
+
+    moduleIds.forEach(modId => {
+        if (allModules[modId]) {
+            const option = document.createElement('option');
+            option.value = modId;
+            option.textContent = allModules[modId].name;
+            moduleSelect.appendChild(option);
+        }
+    });
+}
+
+function loadModuleDetails() {
+    const moduleSelect = document.getElementById('moduleSelect');
+    const selectedModuleId = moduleSelect.value;
+
+    if (!selectedModuleId || !allModules[selectedModuleId]) {
+        document.getElementById('moduleDetails').style.display = 'none';
+        return;
+    }
+
+    const module = allModules[selectedModuleId];
+    
+    // Populate module info
+    document.getElementById('moduleName').textContent = module.name;
+    document.getElementById('moduleDesc').textContent = module.description || '';
+    document.getElementById('moduleCode').textContent = module.code || 'N/A';
+    document.getElementById('moduleYear').textContent = module.year || '?';
+    document.getElementById('moduleSemester').textContent = module.semester || '?';
+
+    // Populate OS list
+    renderOSList(module);
+
+    // Populate software list
+    renderSoftwareList(module, selectedModuleId);
+
+    document.getElementById('moduleDetails').style.display = 'block';
+}
+
+function renderOSList(module) {
+    const osList = document.getElementById('osList');
+    const osArray = module.os_required || [];
+    
+    if (osArray.length === 0) {
+        osList.innerHTML = '<p style="color: #999;">Aucun système d\'exploitation requis.</p>';
+        return;
+    }
+
+    let html = '<table style="width:100%; border-collapse: collapse;">';
+    osArray.forEach((os, idx) => {
+        const osName = typeof os === 'string' ? os : (os.name || '');
+        html += `
+            <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 10px;">${osName}</td>
+                <td style="padding: 10px; text-align: right;">
+                    <button class="btn btn-danger btn-sm" onclick="deleteOS('${module.id}', '${osName}')">🗑️ Supprimer</button>
+                </td>
+            </tr>
+        `;
+    });
+    html += '</table>';
+    osList.innerHTML = html;
+}
+
+function renderSoftwareList(module, moduleId) {
+    const softwareList = document.getElementById('softwareList');
+    const swArray = module.software || [];
+
+    if (swArray.length === 0) {
+        softwareList.innerHTML = '<p style="color: #999;">Aucun logiciel requis.</p>';
+        return;
+    }
+
+    let html = '<table style="width:100%; border-collapse: collapse;">';
+    html += `
+        <thead>
+            <tr style="background: #f0f0f0; border-bottom: 2px solid #ddd;">
+                <th style="padding: 10px; text-align: left;">Logiciel</th>
+                <th style="padding: 10px; text-align: left;">Version</th>
+                <th style="padding: 10px; text-align: left;">Finalité</th>
+                <th style="padding: 10px; text-align: center;">Critique</th>
+                <th style="padding: 10px; text-align: left;">Notes</th>
+                <th style="padding: 10px; text-align: left;">Vérifié par</th>
+                <th style="padding: 10px; text-align: left;">Derni. vérif.</th>
+                <th style="padding: 10px; text-align: right;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    swArray.forEach(sw => {
+        html += `
+            <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 10px;">${sw.name}</td>
+                <td style="padding: 10px;">
+                    <input type="text" value="${sw.version || ''}" class="sw-version" data-name="${sw.name}" style="width:100%;">
+                </td>
+                <td style="padding: 10px;">
+                    <input type="text" value="${sw.purpose || ''}" class="sw-purpose" data-name="${sw.name}" style="width:100%;">
+                </td>
+                <td style="padding: 10px; text-align: center;">
+                    <input type="checkbox" ${sw.critical ? 'checked' : ''} class="sw-critical" data-name="${sw.name}">
+                </td>
+                <td style="padding: 10px;">
+                    <input type="text" value="${sw.notes || ''}" class="sw-notes" data-name="${sw.name}" style="width:100%;">
+                </td>
+                <td style="padding: 10px;">
+                    <input type="text" value="${sw.verified_by || ''}" class="sw-verified-by" data-name="${sw.name}" style="width:100%;">
+                </td>
+                <td style="padding: 10px;">${sw.last_verified || 'N/A'}</td>
+                <td style="padding: 10px; text-align: right;">
+                    <button class="btn btn-success btn-sm" onclick="updateSoftware('${moduleId}', '${sw.name}')">💾</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteSoftware('${moduleId}', '${sw.name}')">🗑️</button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    softwareList.innerHTML = html;
+}
+
+function addOS() {
+    const moduleSelect = document.getElementById('moduleSelect');
+    const moduleId = moduleSelect.value;
+    const osName = document.getElementById('newOSName').value.trim();
+
+    if (!moduleId || !osName) {
+        alert('Module et nom de l\'OS requis');
+        return;
+    }
+
+    const module = allModules[moduleId];
+    const osArray = module.os_required || [];
+    osArray.push({ name: osName });
+
+    fetch(`/api/module/${moduleId}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ os_required: osArray })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ OS ajouté');
+            document.getElementById('newOSName').value = '';
+            loadModuleDetails();
+        } else {
+            alert('✗ Erreur: ' + (data.error || 'Ajout échoué'));
+        }
+    })
+    .catch(err => alert('✗ Erreur: ' + err.message));
+}
+
+function deleteOS(moduleId, osName) {
+    if (!confirm(`Supprimer ${osName} ?`)) return;
+
+    const module = allModules[moduleId];
+    const osArray = (module.os_required || []).filter(o => {
+        const name = typeof o === 'string' ? o : (o.name || '');
+        return name !== osName;
+    });
+
+    fetch(`/api/module/${moduleId}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ os_required: osArray })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ OS supprimé');
+            loadModuleDetails();
+        } else {
+            alert('✗ Erreur: ' + (data.error || 'Suppression échouée'));
+        }
+    })
+    .catch(err => alert('✗ Erreur: ' + err.message));
+}
+
+function addSoftware() {
+    const moduleSelect = document.getElementById('moduleSelect');
+    const moduleId = moduleSelect.value;
+    const name = document.getElementById('newSoftName').value.trim();
+
+    if (!moduleId || !name) {
+        alert('Module et nom du logiciel requis');
+        return;
+    }
+
+    const payload = {
+        name: name,
+        version: document.getElementById('newSoftVersion').value || '',
+        purpose: document.getElementById('newSoftPurpose').value || '',
+        critical: document.getElementById('newSoftCritical').checked,
+        notes: document.getElementById('newSoftNotes').value || '',
+        verified_by: document.getElementById('instructorSelect').options[document.getElementById('instructorSelect').selectedIndex].text || ''
+    };
+
+    fetch(`/api/module/${moduleId}/software/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ Logiciel ajouté');
+            document.getElementById('newSoftName').value = '';
+            document.getElementById('newSoftVersion').value = '';
+            document.getElementById('newSoftPurpose').value = '';
+            document.getElementById('newSoftCritical').checked = false;
+            document.getElementById('newSoftNotes').value = '';
+            loadModuleDetails();
+        } else {
+            alert('✗ Erreur: ' + (data.error || 'Ajout échoué'));
+        }
+    })
+    .catch(err => alert('✗ Erreur: ' + err.message));
+}
+
+function updateSoftware(moduleId, softwareName) {
+    const versionInput = document.querySelector(`.sw-version[data-name="${softwareName}"]`);
+    const purposeInput = document.querySelector(`.sw-purpose[data-name="${softwareName}"]`);
+    const criticalInput = document.querySelector(`.sw-critical[data-name="${softwareName}"]`);
+    const notesInput = document.querySelector(`.sw-notes[data-name="${softwareName}"]`);
+    const verifiedByInput = document.querySelector(`.sw-verified-by[data-name="${softwareName}"]`);
+
+    const payload = {
+        version: versionInput.value || '',
+        purpose: purposeInput.value || '',
+        critical: criticalInput.checked,
+        notes: notesInput.value || '',
+        verified_by: verifiedByInput.value || '',
+        updated_by: verifiedByInput.value || ''
+    };
+
+    fetch(`/api/module/${moduleId}/software/${encodeURIComponent(softwareName)}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ Logiciel mis à jour');
+            loadModuleDetails();
+        } else {
+            alert('✗ Erreur: ' + (data.error || 'Mise à jour échouée'));
+        }
+    })
+    .catch(err => alert('✗ Erreur: ' + err.message));
+}
+
+function deleteSoftware(moduleId, softwareName) {
+    if (!confirm(`Supprimer ${softwareName} ?`)) return;
+
+    fetch(`/api/module/${moduleId}/software/${encodeURIComponent(softwareName)}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ Logiciel supprimé');
+            loadModuleDetails();
+        } else {
+            alert('✗ Erreur: ' + (data.error || 'Suppression échouée'));
+        }
+    })
+    .catch(err => alert('✗ Erreur: ' + err.message));
+}
+</script>
+{% endblock %}

@@ -7,7 +7,7 @@
 
 <div class="page-header">
     <h1>{{ module.name }}</h1>
-    <button class="btn btn-primary" onclick="showAddSoftwareModal()">➕ Ajouter un Logiciel</button>
+    <a href="{{ url_for('view_verification') }}" class="btn btn-primary">📝 Gérer les Logiciels et OS</a>
 </div>
 
 <div class="module-info">
@@ -30,6 +30,7 @@
 
 <h2>Logiciels Requis</h2>
 
+{% if software %}
 <div class="software-list">
     {% for soft in software %}
     <div class="software-item {% if soft.get('critical') %}critical{% endif %}">
@@ -52,187 +53,12 @@
             <span class="meta">Vérifié par: {{ soft.verified_by|instructor_name }}</span>
             {% endif %}
         </div>
-        
-        <div class="card-actions">
-            <button class="btn btn-warning btn-sm" onclick='editSoftware({{ soft|tojson }})'>✏️ Modifier</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteSoftware('{{ soft.name }}')">🗑️ Supprimer</button>
-        </div>
     </div>
     {% endfor %}
 </div>
+{% else %}
+<p>Aucun logiciel requis pour ce module. <a href="{{ url_for('view_verification') }}">Ajouter des logiciels</a></p>
+{% endif %}
 
-<!-- Modal pour ajouter un logiciel -->
-<div id="addSoftwareModal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <span class="close" onclick="closeModal('addSoftwareModal')">&times;</span>
-        <h2>Ajouter un Logiciel</h2>
-        <form onsubmit="addSoftware(event)">
-            <div class="form-group">
-                <label>Nom du logiciel:</label>
-                <input type="text" id="new_soft_name" required>
-            </div>
-            <div class="form-group">
-                <label>Objectif:</label>
-                <textarea id="new_soft_purpose" required></textarea>
-            </div>
-            <div class="form-group">
-                <label>Catégorie:</label>
-                <input type="text" id="new_soft_category" placeholder="IDE, Runtime, Database Tools...">
-            </div>
-            <div class="form-group">
-                <label>Version:</label>
-                <input type="text" id="new_soft_version" value="Latest">
-            </div>
-            <div class="form-group">
-                <label>Notes (optionnel):</label>
-                <textarea id="new_soft_notes"></textarea>
-            </div>
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="new_soft_critical">
-                    Logiciel critique (obligatoire pour le module)
-                </label>
-            </div>
-            <button type="submit" class="btn btn-primary">Ajouter</button>
-            <button type="button" class="btn" onclick="closeModal('addSoftwareModal')">Annuler</button>
-        </form>
-    </div>
-</div>
 
-<!-- Modal pour modifier un logiciel -->
-<div id="editSoftwareModal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <span class="close" onclick="closeModal('editSoftwareModal')">&times;</span>
-        <h2>Modifier un Logiciel</h2>
-        <form onsubmit="updateSoftware(event)">
-            <input type="hidden" id="edit_soft_name">
-            <div class="form-group">
-                <label>Objectif:</label>
-                <textarea id="edit_soft_purpose" required></textarea>
-            </div>
-            <div class="form-group">
-                <label>Catégorie:</label>
-                <input type="text" id="edit_soft_category">
-            </div>
-            <div class="form-group">
-                <label>Version:</label>
-                <input type="text" id="edit_soft_version">
-            </div>
-            <div class="form-group">
-                <label>Notes:</label>
-                <textarea id="edit_soft_notes"></textarea>
-            </div>
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="edit_soft_critical">
-                    Logiciel critique
-                </label>
-            </div>
-            <button type="submit" class="btn btn-primary">Enregistrer</button>
-            <button type="button" class="btn" onclick="closeModal('editSoftwareModal')">Annuler</button>
-        </form>
-    </div>
-</div>
-
-<script>
-const moduleId = '{{ module_id }}';
-
-function showAddSoftwareModal() {
-    document.getElementById('addSoftwareModal').style.display = 'block';
-}
-
-function closeModal(modalId) {
-    document.getElementById(modalId).style.display = 'none';
-}
-
-function addSoftware(event) {
-    event.preventDefault();
-    
-    const data = {
-        name: document.getElementById('new_soft_name').value,
-        purpose: document.getElementById('new_soft_purpose').value,
-        category: document.getElementById('new_soft_category').value,
-        version: document.getElementById('new_soft_version').value,
-        notes: document.getElementById('new_soft_notes').value,
-        critical: document.getElementById('new_soft_critical').checked
-    };
-    
-    fetch(`/api/module/${moduleId}/software/add`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('✓ ' + data.message);
-            location.reload();
-        } else {
-            alert('✗ Erreur: ' + data.error);
-        }
-    });
-}
-
-function editSoftware(softwareData) {
-    document.getElementById('edit_soft_name').value = softwareData.name;
-    document.getElementById('edit_soft_purpose').value = softwareData.purpose || '';
-    document.getElementById('edit_soft_category').value = softwareData.category || '';
-    document.getElementById('edit_soft_version').value = softwareData.version || '';
-    document.getElementById('edit_soft_notes').value = softwareData.notes || '';
-    document.getElementById('edit_soft_critical').checked = softwareData.critical || false;
-    document.getElementById('editSoftwareModal').style.display = 'block';
-}
-
-function updateSoftware(event) {
-    event.preventDefault();
-    
-    const softName = document.getElementById('edit_soft_name').value;
-    const data = {
-        purpose: document.getElementById('edit_soft_purpose').value,
-        category: document.getElementById('edit_soft_category').value,
-        version: document.getElementById('edit_soft_version').value,
-        notes: document.getElementById('edit_soft_notes').value,
-        critical: document.getElementById('edit_soft_critical').checked
-    };
-    
-    fetch(`/api/module/${moduleId}/software/${encodeURIComponent(softName)}/update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('✓ ' + data.message);
-            location.reload();
-        } else {
-            alert('✗ Erreur: ' + data.error);
-        }
-    });
-}
-
-function deleteSoftware(softName) {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer le logiciel "${softName}" ?`)) return;
-    
-    fetch(`/api/module/${moduleId}/software/${encodeURIComponent(softName)}/delete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('✓ ' + data.message);
-            location.reload();
-        } else {
-            alert('✗ Erreur: ' + data.error);
-        }
-    });
-}
-
-window.onclick = function(event) {
-    if (event.target.classList.contains('modal')) {
-        event.target.style.display = 'none';
-    }
-}
-</script>
 {% endblock %}

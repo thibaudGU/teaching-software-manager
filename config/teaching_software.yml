@@ -21,6 +21,26 @@ instructors:
     last_review: '2025-01-01'
     modules:
     - mobile_development
+  prof_cyril_faucher:
+    name: Cyril Faucher
+    email: cyril.faucher@univ-lr.fr
+    department: Informatique
+    modules: []
+    last_review: '2025-12-16'
+  prof_annick_lassus:
+    name: Annick Lassus
+    email: annick.lassus@univ-lr.fr
+    department: informatique
+    modules:
+    - databases
+    last_review: '2025-12-16'
+  prof_sylvain_marchand:
+    name: Sylvain Marchand
+    email: sylvain.marchand@univ-lr.fr
+    department: Informatique
+    modules:
+    - web_development
+    last_review: '2025-12-16'
 modules:
   web_development:
     code: INFO-S3-WEB
@@ -68,6 +88,7 @@ modules:
       critical: false
       last_verified: '2025-01-01'
       verified_by: prof_001
+    instructor_id: prof_sylvain_marchand
   databases:
     code: INFO-S4-DB
     name: Database Design and SQL
@@ -103,6 +124,7 @@ modules:
       critical: false
       last_verified: '2025-01-01'
       verified_by: prof_001
+    instructor_id: prof_annick_lassus
   data_science:
     code: INFO-S5-DATA
     name: Data Science and Analytics
@@ -216,12 +238,20 @@ modules:
       critical: false
       last_verified: '2025-01-01'
       verified_by: prof_003
+    - name: Acrobat Pro
+      purpose: pdf viewer
+      category: ''
+      version: xxx
+      notes: pour test
+      critical: false
+      verified_by: Dr. Thibaud Guilhen
+      last_verified: '2025-12-16'
 email_config:
   enabled: true
   reminder_frequency_months: 3
   smtp_server: mail.univ-lr.fr
-  smtp_port: 25
-  use_tls: false
+  smtp_port: 587
+  use_tls: true
   sender_email: teaching-software-manager@univ-lr.fr
   sender_name: Teaching Software Manager
   app_base_url: http://localhost:5000
@@ -230,9 +260,9 @@ report_config:
   include_last_verified: true
   include_critical_only: false
   format: html
-
-teams_config:
-  # Teams Incoming Webhook URL
-  # Create one here: https://teams.microsoft.com/ → Team Settings → Connectors → Incoming Webhooks
-  # Leave empty to disable Teams notifications
-  webhook_url: ""
+audit_log:
+- timestamp: '2025-12-16T10:40:10.990421'
+  module_id: mobile_development
+  software_name: Acrobat Pro
+  action: added
+  actor: Dr. Thibaud Guilhen

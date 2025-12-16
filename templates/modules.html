@@ -21,7 +21,7 @@
             <strong>OS Requis:</strong>
             <ul>
                 {% for os in module.get('os_required', []) %}
-                <li>{{ os.name }}</li>
+                <li>{{ os.name if os.name is defined else os }}</li>
                 {% endfor %}
             </ul>
         </div>
@@ -185,6 +185,7 @@ function editModule(modId, moduleData) {
     document.getElementById('edit_mod_description').value = moduleData.description || '';
     document.getElementById('edit_mod_year').value = moduleData.year || 1;
     document.getElementById('edit_mod_semester').value = moduleData.semester || 1;
+    updateSemesterOptions('edit_mod_year', 'edit_mod_semester');
 
     // Trouver l'enseignant responsable de ce module
     const instructorSelect = document.getElementById('edit_mod_instructor');
@@ -199,6 +200,42 @@ function editModule(modId, moduleData) {
 
     document.getElementById('editModuleModal').style.display = 'block';
 }
+
+function updateSemesterOptions(yearInputId, semesterSelectId) {
+    const yearInput = document.getElementById(yearInputId);
+    const semesterSelect = document.getElementById(semesterSelectId);
+    const year = parseInt(yearInput.value, 10);
+
+    const allowed = {
+        1: [1, 2],
+        2: [3, 4],
+        3: [5, 6]
+    }[year] || [1, 2, 3, 4, 5, 6];
+
+    const current = parseInt(semesterSelect.value, 10);
+    semesterSelect.innerHTML = '';
+
+    allowed.forEach(val => {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = val;
+        semesterSelect.appendChild(opt);
+    });
+
+    semesterSelect.value = allowed.includes(current) ? current : allowed[0];
+}
+
+['new_mod_year', 'edit_mod_year'].forEach(id => {
+    const input = document.getElementById(id);
+    if (input) {
+        input.addEventListener('change', () => {
+            const semId = id === 'new_mod_year' ? 'new_mod_semester' : 'edit_mod_semester';
+            updateSemesterOptions(id, semId);
+        });
+        const semId = id === 'new_mod_year' ? 'new_mod_semester' : 'edit_mod_semester';
+        updateSemesterOptions(id, semId);
+    }
+});
 
 function updateModule(event) {
     event.preventDefault();
