@@ -17,6 +17,9 @@
                 <li><a href="{{ url_for('view_reports') }}">Rapports</a></li>
                 <li><a href="{{ url_for('view_verification') }}">🔍 Vérification</a></li>
                 <li><a href="{{ url_for('view_settings') }}">Paramètres</a></li>
+                {% if session.get('authenticated') %}
+                <li style="margin-left: auto;"><a href="{{ url_for('logout') }}" style="color: #d9534f;">🔓 Déconnexion</a></li>
+                {% endif %}
             </ul>
         </div>
     </nav>

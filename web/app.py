@@ -9,16 +9,30 @@ from pathlib import Path
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, send_file
+from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, send_file, session
 from config_loader import ConfigLoader
 from email_notifier import EmailNotifier
 from excel_sync import ExcelSyncManager
 from config_writer import ConfigWriter
 import yaml
 from datetime import datetime
+import os
+from functools import wraps
 
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
-app.secret_key = 'teaching-software-manager-secret'
+app.secret_key = os.getenv('SECRET_KEY', 'teaching-software-manager-secret')
+
+# Admin password from environment
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
+
+def require_auth(f):
+    """Decorator to protect routes - require authentication."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('authenticated'):
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Load configuration
 config_loader = ConfigLoader()
@@ -213,9 +227,35 @@ def health_check():
         }), 500
 
 
+# ========== AUTH ROUTES ==========
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login page and handler."""
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if password == ADMIN_PASSWORD:
+            session['authenticated'] = True
+            flash('Authentification réussie', 'success')
+            return redirect(url_for('index'))
+        else:
+            flash('Mot de passe incorrect', 'error')
+    
+    return render_template('login.html')
+
+
+@app.route('/logout')
+def logout():
+    """Logout handler."""
+    session.pop('authenticated', None)
+    flash('Vous avez été déconnecté', 'info')
+    return redirect(url_for('login'))
+
+
 # ========== EDIT ROUTES ==========
 
 @app.route('/api/instructor/add', methods=['POST'])
+@require_auth
 def add_instructor():
     """Add a new instructor (API)."""
     try:
@@ -263,6 +303,7 @@ def add_instructor():
 
 
 @app.route('/api/instructor/<instructor_id>/update', methods=['POST'])
+@require_auth
 def update_instructor(instructor_id):
     """Update an instructor (API)."""
     try:
@@ -320,6 +361,7 @@ def update_instructor(instructor_id):
 
 
 @app.route('/api/instructor/<instructor_id>/delete', methods=['POST'])
+@require_auth
 def delete_instructor(instructor_id):
     """Delete an instructor (API)."""
     try:
@@ -336,6 +378,7 @@ def delete_instructor(instructor_id):
 
 
 @app.route('/api/module/add', methods=['POST'])
+@require_auth
 def add_module():
     """Add a new module (API)."""
     try:
@@ -394,6 +437,7 @@ def add_module():
 
 
 @app.route('/api/module/<module_id>/update', methods=['POST'])
+@require_auth
 def update_module(module_id):
     """Update a module (API)."""
     try:
@@ -452,6 +496,7 @@ def update_module(module_id):
 
 
 @app.route('/api/module/<module_id>/delete', methods=['POST'])
+@require_auth
 def delete_module(module_id):
     """Delete a module (API)."""
     try:
@@ -468,6 +513,7 @@ def delete_module(module_id):
 
 
 @app.route('/api/module/<module_id>/software/add', methods=['POST'])
+@require_auth
 def add_software(module_id):
     """Add software to a module (API)."""
     try:
@@ -479,7 +525,8 @@ def add_software(module_id):
             'version': data.get('version', 'Latest'),
             'notes': data.get('notes', ''),
             'critical': data.get('critical', False),
-            'verified_by': data.get('verified_by', '')
+            'verified_by': data.get('verified_by', ''),
+            'os_supported': data.get('os_supported', [])
         }
         
         success = config_writer.add_software_to_module(module_id, software_data)
@@ -495,6 +542,7 @@ def add_software(module_id):
 
 
 @app.route('/api/module/<module_id>/software/<software_name>/update', methods=['POST'])
+@require_auth
 def update_software(module_id, software_name):
     """Update software in a module (API)."""
     try:
@@ -513,6 +561,8 @@ def update_software(module_id, software_name):
             software_data['critical'] = data['critical']
         if 'verified_by' in data:
             software_data['verified_by'] = data['verified_by']
+        if 'os_supported' in data:
+            software_data['os_supported'] = data['os_supported']
         
         software_data['last_verified'] = datetime.now().strftime('%Y-%m-%d')
         
@@ -529,6 +579,7 @@ def update_software(module_id, software_name):
 
 
 @app.route('/api/module/<module_id>/software/<software_name>/delete', methods=['POST'])
+@require_auth
 def delete_software(module_id, software_name):
     """Delete software from a module (API)."""
     try:
@@ -545,6 +596,7 @@ def delete_software(module_id, software_name):
 
 
 @app.route('/api/excel/export', methods=['POST'])
+@require_auth
 def excel_export():
     """Export YAML config to Excel file."""
     try:
@@ -555,6 +607,7 @@ def excel_export():
 
 
 @app.route('/api/excel/import', methods=['POST'])
+@require_auth
 def excel_import():
     """Import data from Excel file to YAML config."""
     try:
@@ -621,4 +674,4 @@ if __name__ == '__main__':
     print("Visit: http://localhost:5000")
     print("Press Ctrl+C to stop\n")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='127.0.0.1', port=5000, use_reloader=False)
