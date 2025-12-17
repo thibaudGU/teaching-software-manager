@@ -46,6 +46,7 @@ class ExcelSyncManager:
         self._create_instructors_sheet(wb)
         self._create_modules_sheet(wb)
         self._create_software_sheet(wb)
+        self._create_software_by_os_sheet(wb)
         # Optional ChangeLog sheet for audit trail
         try:
             self._create_changelog_sheet(wb)
@@ -84,7 +85,7 @@ class ExcelSyncManager:
         """Create Modules sheet template."""
         ws = wb.create_sheet("Modules")
         
-        headers = ["ID", "Code", "Name", "Description", "Year", "Semester", "Instructor"]
+        headers = ["ID", "Code", "Name", "Description", "Year", "Semester", "OS Required", "Instructor"]
         ws.append(headers)
         
         # Style header
@@ -103,13 +104,14 @@ class ExcelSyncManager:
         ws.column_dimensions['D'].width = 40
         ws.column_dimensions['E'].width = 8
         ws.column_dimensions['F'].width = 10
-        ws.column_dimensions['G'].width = 20
+        ws.column_dimensions['G'].width = 30
+        ws.column_dimensions['H'].width = 20
 
     def _create_software_sheet(self, wb: openpyxl.Workbook) -> None:
         """Create Software sheet template."""
         ws = wb.create_sheet("Software")
         
-        headers = ["Module ID", "Software Name", "Version", "Purpose", "Critical", "Notes", "Last Verified", "Verified By"]
+        headers = ["Module ID", "Software Name", "Version", "Purpose", "Category", "Critical", "OS Supported", "Notes", "Last Verified", "Verified By"]
         ws.append(headers)
         
         # Style header
@@ -126,10 +128,12 @@ class ExcelSyncManager:
         ws.column_dimensions['B'].width = 25
         ws.column_dimensions['C'].width = 12
         ws.column_dimensions['D'].width = 30
-        ws.column_dimensions['E'].width = 10
-        ws.column_dimensions['F'].width = 30
-        ws.column_dimensions['G'].width = 15
-        ws.column_dimensions['H'].width = 20
+        ws.column_dimensions['E'].width = 15
+        ws.column_dimensions['F'].width = 10
+        ws.column_dimensions['G'].width = 35
+        ws.column_dimensions['H'].width = 30
+        ws.column_dimensions['I'].width = 15
+        ws.column_dimensions['J'].width = 20
 
     def _create_changelog_sheet(self, wb: openpyxl.Workbook) -> None:
         """Create ChangeLog sheet template for audit trail."""
@@ -150,6 +154,32 @@ class ExcelSyncManager:
         ws.column_dimensions['F'].width = 16
         ws.column_dimensions['G'].width = 22
         ws.column_dimensions['H'].width = 22
+
+    def _create_software_by_os_sheet(self, wb: openpyxl.Workbook) -> None:
+        """Create Software by OS sheet template."""
+        ws = wb.create_sheet("Software by OS")
+        
+        headers = ["OS", "Software Name", "Version", "Category", "Module ID", "Purpose", "Critical", "Notes"]
+        ws.append(headers)
+        
+        # Style header
+        header_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Set column widths
+        ws.column_dimensions['A'].width = 25
+        ws.column_dimensions['B'].width = 25
+        ws.column_dimensions['C'].width = 12
+        ws.column_dimensions['D'].width = 18
+        ws.column_dimensions['E'].width = 20
+        ws.column_dimensions['F'].width = 30
+        ws.column_dimensions['G'].width = 10
+        ws.column_dimensions['H'].width = 30
 
     def export_to_excel(self) -> Tuple[bool, str]:
         """
@@ -188,6 +218,15 @@ class ExcelSyncManager:
             
             for mod_id, mod_data in modules.items():
                 instructor = mod_data.get('instructor_id', '')
+                os_required = []
+                for os_entry in mod_data.get('os_required', []):
+                    if isinstance(os_entry, dict):
+                        name = os_entry.get('name') or ''
+                        note = os_entry.get('note') or os_entry.get('description') or ''
+                        os_required.append(f"{name} ({note})".strip()) if note else os_required.append(name)
+                    else:
+                        os_required.append(str(os_entry))
+                os_required_str = ", ".join([o for o in os_required if o])
                 ws_mod.append([
                     mod_id,
                     mod_data.get('code', ''),
@@ -195,6 +234,7 @@ class ExcelSyncManager:
                     mod_data.get('description', ''),
                     mod_data.get('year', ''),
                     mod_data.get('semester', ''),
+                    os_required_str,
                     instructor
                 ])
             
@@ -204,16 +244,78 @@ class ExcelSyncManager:
                 ws_soft.delete_rows(2, ws_soft.max_row - 1)
             
             for mod_id, mod_data in modules.items():
+                module_os_names = []
+                for os_entry in mod_data.get('os_required', []):
+                    if isinstance(os_entry, dict):
+                        if os_entry.get('name'):
+                            module_os_names.append(os_entry.get('name'))
+                    else:
+                        module_os_names.append(str(os_entry))
                 for software in mod_data.get('software', []):
+                    os_list = software.get('os_supported', [])
+                    if not os_list and module_os_names:
+                        os_list = module_os_names
+                    os_supported = ', '.join(os_list)
                     ws_soft.append([
                         mod_id,
                         software.get('name', ''),
                         software.get('version', ''),
                         software.get('purpose', ''),
+                        software.get('category', ''),
                         'Yes' if software.get('critical', False) else 'No',
+                        os_supported,
                         software.get('notes', ''),
                         software.get('last_verified', ''),
                         software.get('verified_by', '')
+                    ])
+            
+            # Export software by OS
+            ws_os = wb["Software by OS"] if "Software by OS" in wb.sheetnames else None
+            if ws_os is None:
+                self._create_software_by_os_sheet(wb)
+                ws_os = wb["Software by OS"]
+            if ws_os.max_row > 1:
+                ws_os.delete_rows(2, ws_os.max_row - 1)
+            
+            # Build a mapping of OS to software
+            os_to_software = {}
+            for mod_id, mod_data in modules.items():
+                module_os_names = []
+                for os_entry in mod_data.get('os_required', []):
+                    if isinstance(os_entry, dict):
+                        if os_entry.get('name'):
+                            module_os_names.append(os_entry.get('name'))
+                    else:
+                        module_os_names.append(str(os_entry))
+                for software in mod_data.get('software', []):
+                    os_list = software.get('os_supported', [])
+                    if not os_list and module_os_names:
+                        os_list = module_os_names
+                    for os_name in os_list:
+                        if os_name not in os_to_software:
+                            os_to_software[os_name] = []
+                        os_to_software[os_name].append({
+                            'name': software.get('name', ''),
+                            'version': software.get('version', ''),
+                            'category': software.get('category', ''),
+                            'module_id': mod_id,
+                            'purpose': software.get('purpose', ''),
+                            'critical': software.get('critical', False),
+                            'notes': software.get('notes', '')
+                        })
+            
+            # Sort OS names and export
+            for os_name in sorted(os_to_software.keys()):
+                for soft_info in os_to_software[os_name]:
+                    ws_os.append([
+                        os_name,
+                        soft_info['name'],
+                        soft_info['version'],
+                        soft_info['category'],
+                        soft_info['module_id'],
+                        soft_info['purpose'],
+                        'Yes' if soft_info['critical'] else 'No',
+                        soft_info['notes']
                     ])
             
             # Export audit log to ChangeLog
@@ -287,15 +389,23 @@ class ExcelSyncManager:
             if ws_mod:
                 for row in ws_mod.iter_rows(min_row=2, values_only=True):
                     if row[0]:  # ID exists
+                        os_required_list = []
+                        os_raw = row[6] if len(row) > 6 else ''
+                        if os_raw:
+                            for os_item in os_raw.split(','):
+                                name = os_item.strip()
+                                if name:
+                                    os_required_list.append({'name': name})
+                        instructor_val = row[7] if len(row) > 7 else ''
                         modules[row[0]] = {
                             'code': row[1] or '',
                             'name': row[2] or '',
                             'description': row[3] or '',
                             'year': int(row[4]) if row[4] else 1,
                             'semester': int(row[5]) if row[5] else 1,
-                            'instructor_id': row[6] or '',
-                            'software': [],
-                            'os_required': []
+                            'os_required': os_required_list,
+                            'instructor_id': instructor_val or '',
+                            'software': []
                         }
             
             # Import software
@@ -305,14 +415,29 @@ class ExcelSyncManager:
                     if row[0] and row[1]:  # Module ID and software name exist
                         mod_id = row[0]
                         if mod_id in modules:
+                            # Parse OS supported from comma-separated string
+                            os_str = row[6] if row[6] else ""
+                            os_supported = [os.strip() for os in os_str.split(",") if os.strip()] if os_str else []
+                            if not os_supported:
+                                module_os_names = []
+                                for os_entry in modules[mod_id].get('os_required', []):
+                                    if isinstance(os_entry, dict):
+                                        if os_entry.get('name'):
+                                            module_os_names.append(os_entry.get('name'))
+                                    else:
+                                        module_os_names.append(str(os_entry))
+                                os_supported = module_os_names
+                            
                             software = {
                                 'name': row[1],
                                 'version': row[2] or '',
                                 'purpose': row[3] or '',
-                                'critical': row[4] == 'Yes' if row[4] else False,
-                                'notes': row[5] or '',
-                                'last_verified': row[6] or '',
-                                'verified_by': row[7] or ''
+                                'category': row[4] or '',
+                                'critical': row[5] == 'Yes' if row[5] else False,
+                                'os_supported': os_supported,
+                                'notes': row[7] or '',
+                                'last_verified': row[8] or '',
+                                'verified_by': row[9] or ''
                             }
                             modules[mod_id]['software'].append(software)
             
