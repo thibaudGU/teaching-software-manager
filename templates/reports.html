@@ -64,19 +64,6 @@
 
 <hr>
 
-<div class="report-section">
-    <h2>Rapport Récapitulatif</h2>
-    <p>Générer un inventaire complet de tous les enseignants, modules et logiciels.</p>
-    <button class="btn btn-primary" onclick="generateSummaryReport()">
-        📊 Générer Rapport Récapitulatif
-    </button>
-</div>
-
-<div id="summary-report" style="display:none; margin-top: 30px;">
-    <h2>Rapport Récapitulatif</h2>
-    <pre id="summary-content"></pre>
-</div>
-
 <!-- Modal SMTP sécurisé -->
 <div id="smtpModal" class="modal" style="display:none;">
     <div class="modal-content">
@@ -245,23 +232,6 @@ function showEmailPreviews() {
     
     html += '</body></html>';
     previewWindow.document.write(html);
-}
-
-function generateSummaryReport() {
-    fetch('/api/summary-report')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const container = document.getElementById('summary-report');
-                const content = document.getElementById('summary-content');
-                
-                content.textContent = data.report;
-                container.style.display = 'block';
-                container.scrollIntoView({ behavior: 'smooth' });
-            } else {
-                alert('Erreur : ' + data.error);
-            }
-        });
 }
 
 function checkSyncStatus() {
