@@ -58,14 +58,22 @@
         </div>
         <div style="background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
             <h4>Ajouter un logiciel</h4>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr) 1fr 1fr 200px; gap: 10px; margin-bottom: 10px;">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr) 1fr; gap: 10px; margin-bottom: 10px;">
                 <input type="text" id="newSoftName" placeholder="Nom du logiciel" required>
                 <input type="text" id="newSoftVersion" placeholder="Version">
                 <input type="text" id="newSoftPurpose" placeholder="Finalité">
                 <label style="display: flex; align-items: center;"><input type="checkbox" id="newSoftCritical"> Critique</label>
-                <input type="text" id="newSoftNotes" placeholder="Notes" style="grid-column: span 1;">
-                <button class="btn btn-success" onclick="addSoftware()">➕ Ajouter</button>
             </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <input type="text" id="newSoftNotes" placeholder="Notes">
+                <div>
+                    <label><strong>Systèmes d'Exploitation Supportés:</strong></label>
+                    <div id="newSoftOSList" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; padding: 10px; background: white; border: 1px solid #ddd; border-radius: 4px;">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-success" onclick="addSoftware()">➕ Ajouter</button>
         </div>
     </div>
 </div>
@@ -130,8 +138,32 @@ function loadModuleDetails() {
 
     // Populate software list
     renderSoftwareList(module, selectedModuleId);
+    
+    // Populate OS checkboxes for new software
+    populateOSCheckboxes(module);
 
     document.getElementById('moduleDetails').style.display = 'block';
+}
+
+function populateOSCheckboxes(module) {
+    const osCheckboxes = document.getElementById('newSoftOSList');
+    const osArray = module.os_required || [];
+    
+    if (osArray.length === 0) {
+        osCheckboxes.innerHTML = '<p style="color: #999;">Aucun OS disponible. Ajoutez d\'abord des OS au module.</p>';
+        return;
+    }
+    
+    let html = '';
+    osArray.forEach(os => {
+        const osName = typeof os === 'string' ? os : (os.name || '');
+        html += `
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input type="checkbox" class="os-checkbox" value="${osName}"> ${osName}
+            </label>
+        `;
+    });
+    osCheckboxes.innerHTML = html;
 }
 
 function renderOSList(module) {
@@ -176,9 +208,10 @@ function renderSoftwareList(module, moduleId) {
                 <th style="padding: 10px; text-align: left;">Version</th>
                 <th style="padding: 10px; text-align: left;">Finalité</th>
                 <th style="padding: 10px; text-align: center;">Critique</th>
+                <th style="padding: 10px; text-align: left;">Systèmes d'Exploitation</th>
                 <th style="padding: 10px; text-align: left;">Notes</th>
                 <th style="padding: 10px; text-align: left;">Vérifié par</th>
-                <th style="padding: 10px; text-align: left;">Derni. vérif.</th>
+                <th style="padding: 10px; text-align: left;">Dernière vérif.</th>
                 <th style="padding: 10px; text-align: right;">Actions</th>
             </tr>
         </thead>
@@ -186,6 +219,7 @@ function renderSoftwareList(module, moduleId) {
     `;
     
     swArray.forEach(sw => {
+        const osList = (sw.os_supported || []).join(', ');
         html += `
             <tr style="border-bottom: 1px solid #ddd;">
                 <td style="padding: 10px;">${sw.name}</td>
@@ -199,13 +233,19 @@ function renderSoftwareList(module, moduleId) {
                     <input type="checkbox" ${sw.critical ? 'checked' : ''} class="sw-critical" data-name="${sw.name}">
                 </td>
                 <td style="padding: 10px;">
+                    <input type="text" value="${osList}" class="sw-os" data-name="${sw.name}" placeholder="ex: Windows 10/11, macOS 12+" style="width:100%;">
+                </td>
+                <td style="padding: 10px;">
                     <input type="text" value="${sw.notes || ''}" class="sw-notes" data-name="${sw.name}" style="width:100%;">
                 </td>
                 <td style="padding: 10px;">
                     <input type="text" value="${sw.verified_by || ''}" class="sw-verified-by" data-name="${sw.name}" style="width:100%;">
                 </td>
-                <td style="padding: 10px;">${sw.last_verified || 'N/A'}</td>
+                <td style="padding: 10px; text-align: center;">
+                    <small>${sw.last_verified || 'N/A'}</small>
+                </td>
                 <td style="padding: 10px; text-align: right;">
+                    <button class="btn btn-info btn-sm" onclick="verifySoftware('${moduleId}', '${sw.name}')">✓ Vérifier</button>
                     <button class="btn btn-success btn-sm" onclick="updateSoftware('${moduleId}', '${sw.name}')">💾</button>
                     <button class="btn btn-danger btn-sm" onclick="deleteSoftware('${moduleId}', '${sw.name}')">🗑️</button>
                 </td>
@@ -275,6 +315,30 @@ function deleteOS(moduleId, osName) {
     .catch(err => alert('✗ Erreur: ' + err.message));
 }
 
+function verifySoftware(moduleId, softwareName) {
+    const verifierName = prompt('Qui a effectué la vérification ? (nom ou prénom)', 'Unknown');
+    
+    if (verifierName === null) return;  // Cancel button
+    
+    const payload = { verified_by: verifierName.trim() || 'Unknown' };
+    
+    fetch(`/api/module/${moduleId}/software/${encodeURIComponent(softwareName)}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message || '✓ Logiciel vérifié');
+            loadModuleDetails();
+        } else {
+            alert('✗ Erreur: ' + (data.error || 'Vérification échouée'));
+        }
+    })
+    .catch(err => alert('✗ Erreur: ' + err.message));
+}
+
 function addSoftware() {
     const moduleSelect = document.getElementById('moduleSelect');
     const moduleId = moduleSelect.value;
@@ -285,12 +349,17 @@ function addSoftware() {
         return;
     }
 
+    // Get selected OS
+    const osCheckboxes = document.querySelectorAll('.os-checkbox:checked');
+    const osList = Array.from(osCheckboxes).map(cb => cb.value);
+
     const payload = {
         name: name,
         version: document.getElementById('newSoftVersion').value || '',
         purpose: document.getElementById('newSoftPurpose').value || '',
         critical: document.getElementById('newSoftCritical').checked,
         notes: document.getElementById('newSoftNotes').value || '',
+        os_supported: osList,
         verified_by: document.getElementById('instructorSelect').options[document.getElementById('instructorSelect').selectedIndex].text || ''
     };
 
@@ -308,6 +377,7 @@ function addSoftware() {
             document.getElementById('newSoftPurpose').value = '';
             document.getElementById('newSoftCritical').checked = false;
             document.getElementById('newSoftNotes').value = '';
+            document.querySelectorAll('.os-checkbox').forEach(cb => cb.checked = false);
             loadModuleDetails();
         } else {
             alert('✗ Erreur: ' + (data.error || 'Ajout échoué'));
@@ -322,6 +392,10 @@ function updateSoftware(moduleId, softwareName) {
     const criticalInput = document.querySelector(`.sw-critical[data-name="${softwareName}"]`);
     const notesInput = document.querySelector(`.sw-notes[data-name="${softwareName}"]`);
     const verifiedByInput = document.querySelector(`.sw-verified-by[data-name="${softwareName}"]`);
+    const osInput = document.querySelector(`.sw-os[data-name="${softwareName}"]`);
+
+    // Parse OS from comma-separated list
+    const osList = osInput.value.split(',').map(os => os.trim()).filter(os => os);
 
     const payload = {
         version: versionInput.value || '',
@@ -329,6 +403,7 @@ function updateSoftware(moduleId, softwareName) {
         critical: criticalInput.checked,
         notes: notesInput.value || '',
         verified_by: verifiedByInput.value || '',
+        os_supported: osList,
         updated_by: verifiedByInput.value || ''
     };
 
